@@ -28,7 +28,8 @@ enum class GlyphConnection { CONNECTING, CONNECTED, UNAVAILABLE }
 class GlyphRuntime(context: Context) : SensorEventListener {
     private val appContext = context.applicationContext
     private val sensorManager = appContext.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-    private val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+    private val motionSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
+        ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     private val engine = MatrixEngine()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val _frame = MutableStateFlow(IntArray(MatrixEngine.PIXEL_COUNT))
@@ -59,8 +60,8 @@ class GlyphRuntime(context: Context) : SensorEventListener {
 
     fun start(initialConfig: MatrixConfig) {
         config = initialConfig
-        if (accelerometer != null) {
-            sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_GAME)
+        if (motionSensor != null) {
+            sensorManager.registerListener(this, motionSensor, SensorManager.SENSOR_DELAY_GAME)
         }
         runCatching {
             manager = GlyphMatrixManager.getInstance(appContext)
@@ -78,7 +79,7 @@ class GlyphRuntime(context: Context) : SensorEventListener {
                     val next = engine.render(current, System.nanoTime(), tiltX, tiltY)
                     _frame.value = next
                     if (outputEnabled && _connection.value == GlyphConnection.CONNECTED) {
-                        val hardwareFrame = HardwareFrameMapper.forGlyph(next)
+                        val hardwareFrame = HardwareFrameMapper.forGlyph(next, current.brightness)
                         withContext(Dispatchers.Main.immediate) {
                             runCatching { manager?.setAppMatrixFrame(hardwareFrame) }
                                 .onFailure { _connection.value = GlyphConnection.UNAVAILABLE }
@@ -109,10 +110,12 @@ class GlyphRuntime(context: Context) : SensorEventListener {
     }
 
     override fun onSensorChanged(event: SensorEvent) {
-        if (event.sensor.type != Sensor.TYPE_ACCELEROMETER) return
+        if (event.sensor.type != motionSensor?.type) return
         val alpha = 0.16f
-        val x = (event.values[0] / SensorManager.GRAVITY_EARTH).coerceIn(-1f, 1f)
-        val y = (event.values[1] / SensorManager.GRAVITY_EARTH).coerceIn(-1f, 1f)
+        val isGravityVector = event.sensor.type == Sensor.TYPE_GRAVITY
+        val direction = if (isGravityVector) -1f else 1f
+        val x = (event.values[0] / SensorManager.GRAVITY_EARTH * direction).coerceIn(-1f, 1f)
+        val y = (event.values[1] / SensorManager.GRAVITY_EARTH * direction).coerceIn(-1f, 1f)
         tiltX += alpha * (x - tiltX)
         tiltY += alpha * (y - tiltY)
     }

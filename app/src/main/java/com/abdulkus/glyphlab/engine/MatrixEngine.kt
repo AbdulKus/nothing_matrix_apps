@@ -17,8 +17,8 @@ import kotlin.math.sqrt
 class MatrixEngine(seed: Long = System.nanoTime()) {
     private val random = Random(seed)
     private val fireHeat = FloatArray(PIXEL_COUNT)
-    private val gravityTrail = FloatArray(PIXEL_COUNT)
-    private val particles = mutableListOf<Particle>()
+    private val sand = mutableListOf<Cell>()
+    private var sandStepAccumulator = 0f
     private val stars = MutableList(34) { newStar() }
     private var lastNanos = 0L
 
@@ -47,7 +47,7 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
             EffectType.STARFIELD -> renderStarfield(config, dt, sensorX, sensorY)
         }
 
-        val brightness = config.brightness.coerceIn(0.05f, 1f)
+        val brightness = config.brightness.coerceIn(0f, 1f)
         for (i in raw.indices) {
             raw[i] = if (isInsideMatrix(i % SIZE, i / SIZE)) {
                 (raw[i] * brightness).roundToInt().coerceIn(0, 255)
@@ -66,15 +66,15 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
     ): IntArray {
         val frame = IntArray(PIXEL_COUNT)
         val solid = solid(config.solid)
-        val orbit = time * config.speed * 1.8
+        val orbit = time * config.speed * 1.25
 
         // The object stays fixed behind the glass. Tilt and automatic motion orbit
         // the camera around it, producing view-dependent perspective/parallax
         // instead of rotations in the object's local coordinate system.
-        val cameraYaw = 0.55 + orbit + tiltX * 0.82
-        val cameraPitch = (-0.32 + sin(orbit * 0.63) * 0.16 - tiltY * 0.68)
-            .coerceIn(-1.05, 1.05)
-        val cameraDistance = 5.1
+        val cameraYaw = 0.62 + orbit + tiltX * 0.48
+        val cameraPitch = (-0.42 + sin(orbit * 0.63) * 0.10 - tiltY * 0.42)
+            .coerceIn(-0.85, 0.35)
+        val cameraDistance = 5.6
         val camera = V3(
             x = sin(cameraYaw) * cos(cameraPitch) * cameraDistance,
             y = sin(cameraPitch) * cameraDistance,
@@ -88,28 +88,51 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
             val fromCamera = vertex - camera
             val viewX = fromCamera.dot(right)
             val viewY = fromCamera.dot(down)
-            val viewDepth = fromCamera.dot(forward).coerceAtLeast(2.4)
-            val perspective = 4.25 / viewDepth
+            val viewDepth = fromCamera.dot(forward).coerceAtLeast(3.0)
+            // Only a little perspective is possible on 13x13. Keeping it bounded
+            // stops near edges from collapsing into a dense cluster of pixels.
+            val perspective = (cameraDistance / viewDepth).coerceIn(0.88, 1.15)
             Point2(
-                x = CENTER + viewX * perspective * 3.15,
-                y = CENTER + viewY * perspective * 3.15,
+                x = CENTER + viewX * perspective * 2.28,
+                y = CENTER + viewY * perspective * 2.28,
                 depth = viewDepth
             )
         }
 
-        solid.edges.sortedByDescending { (a, b) -> (points[a].depth + points[b].depth) / 2.0 }
+        val visibleEdges = if (config.solid == SolidType.CUBE) {
+            cubeVisibleEdges(camera)
+        } else {
+            solid.edges.indices.toSet()
+        }
+        visibleEdges.map { solid.edges[it] }
+            .sortedByDescending { (a, b) -> (points[a].depth + points[b].depth) / 2.0 }
             .forEach { (a, b) ->
                 val depth = (points[a].depth + points[b].depth) / 2.0
-                val level = (276 - depth * 12).roundToInt().coerceIn(205, 255)
+                // Far edges remain visible but clearly dimmer than the near face.
+                // The previous 205..255 range became an unreadable solid blob.
+                val near = ((6.9 - depth) / 3.0).coerceIn(0.0, 1.0)
+                val level = (42 + near * 198).roundToInt()
                 drawLine(frame, points[a], points[b], level)
             }
 
         if (config.showVertices) {
-            points.forEach { point ->
+            visibleEdges.flatMapTo(mutableSetOf()) { edgeIndex ->
+                listOf(solid.edges[edgeIndex].first, solid.edges[edgeIndex].second)
+            }.forEach { vertexIndex ->
+                val point = points[vertexIndex]
                 put(frame, point.x.roundToInt(), point.y.roundToInt(), 255)
             }
         }
         return frame
+    }
+
+    private fun cubeVisibleEdges(camera: V3): Set<Int> = buildSet {
+        // Each camera-facing cube face contributes its four outline edges.
+        // Omitting the three fully hidden edges is much clearer than drawing all
+        // twelve on a 13x13 display, where they otherwise merge into a blob.
+        addAll(if (camera.z < 0) listOf(0, 1, 2, 3) else listOf(4, 5, 6, 7))
+        addAll(if (camera.y < 0) listOf(0, 9, 4, 8) else listOf(2, 10, 6, 11))
+        addAll(if (camera.x < 0) listOf(3, 11, 7, 8) else listOf(1, 10, 5, 9))
     }
 
     private fun renderFire(config: MatrixConfig, tiltX: Float): IntArray {
@@ -160,54 +183,85 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
         tiltX: Float,
         tiltY: Float
     ): IntArray {
-        val targetCount = config.particleCount.coerceIn(8, 56)
-        val center = CENTER.toFloat()
-        while (particles.size < targetCount) {
-            particles += Particle(
-                x = center + (random.nextFloat() - 0.5f) * 5f,
-                y = center + (random.nextFloat() - 0.5f) * 5f,
-                vx = (random.nextFloat() - 0.5f) * 2f,
-                vy = (random.nextFloat() - 0.5f) * 2f
-            )
-        }
-        while (particles.size > targetCount) particles.removeLast()
+        resizeSand(config.particleCount.coerceIn(8, 56))
 
-        val fade = (0.43f + config.trail * 0.48f).coerceIn(0.4f, 0.94f)
-        gravityTrail.indices.forEach { gravityTrail[it] *= fade }
-
-        val gx = if (config.accelerometer) tiltX * 14f else sin(lastNanos / 2.8e9).toFloat() * 1.8f
-        // Matrix rows grow downwards; Android's positive Y points toward the
-        // physical top of a portrait phone and must therefore accelerate down.
-        val gy = if (config.accelerometer) tiltY * 14f else 7.5f
-        val bounce = 0.66f + config.intensity * 0.22f
-        val drag = 0.986f - config.speed * 0.018f
-
-        particles.forEach { p ->
-            p.vx = (p.vx + gx * dt) * drag
-            p.vy = (p.vy + gy * dt) * drag
-            p.x += p.vx * dt * (0.6f + config.speed * 1.6f)
-            p.y += p.vy * dt * (0.6f + config.speed * 1.6f)
-
-            val dx = p.x - center
-            val dy = p.y - center
-            val distance = sqrt(dx * dx + dy * dy)
-            if (distance > MATRIX_RADIUS - 0.35f) {
-                val nx = dx / distance.coerceAtLeast(0.001f)
-                val ny = dy / distance.coerceAtLeast(0.001f)
-                p.x = center + nx * (MATRIX_RADIUS - 0.4f)
-                p.y = center + ny * (MATRIX_RADIUS - 0.4f)
-                val normalVelocity = p.vx * nx + p.vy * ny
-                if (normalVelocity > 0f) {
-                    p.vx -= (1f + bounce) * normalVelocity * nx
-                    p.vy -= (1f + bounce) * normalVelocity * ny
-                }
+        val gx = if (config.accelerometer) tiltX else sin(lastNanos / 2.8e9).toFloat() * 0.24f
+        val gy = if (config.accelerometer) tiltY else 1f
+        val magnitude = sqrt(gx * gx + gy * gy)
+        if (magnitude > 0.08f) {
+            sandStepAccumulator += dt * (4f + config.speed * 15f) * magnitude.coerceAtLeast(0.35f)
+            repeat(sandStepAccumulator.toInt().coerceAtMost(3)) {
+                stepSand(gx, gy, config.trail)
+                sandStepAccumulator -= 1f
             }
-
-            val px = p.x.roundToInt().coerceIn(0, SIZE - 1)
-            val py = p.y.roundToInt().coerceIn(0, SIZE - 1)
-            gravityTrail[index(px, py)] = 255f
+        } else {
+            sandStepAccumulator = 0f
         }
-        return IntArray(PIXEL_COUNT) { gravityTrail[it].roundToInt().coerceIn(0, 255) }
+
+        return IntArray(PIXEL_COUNT).also { frame ->
+            sand.forEach { grain -> frame[index(grain.x, grain.y)] = 255 }
+        }
+    }
+
+    private fun resizeSand(targetCount: Int) {
+        while (sand.size > targetCount) sand.removeLast()
+        val occupied = sand.mapTo(mutableSetOf()) { index(it.x, it.y) }
+        var attempts = 0
+        while (sand.size < targetCount && attempts++ < 800) {
+            val x = (CENTER + (random.nextFloat() - 0.5f) * 8f).roundToInt()
+            val y = (CENTER + (random.nextFloat() - 0.5f) * 8f).roundToInt()
+            if (x in 0 until SIZE && y in 0 until SIZE && isInsideMatrix(x, y)) {
+                val cellIndex = index(x, y)
+                if (occupied.add(cellIndex)) sand += Cell(x, y)
+            }
+        }
+    }
+
+    private fun stepSand(gravityX: Float, gravityY: Float, looseness: Float) {
+        val horizontalIsDominant = abs(gravityX) > abs(gravityY)
+        val primaryX = if (horizontalIsDominant) gravityX.signInt() else 0
+        val primaryY = if (horizontalIsDominant) 0 else gravityY.signInt()
+        if (primaryX == 0 && primaryY == 0) return
+
+        val secondarySign = if (horizontalIsDominant) gravityY.signInt() else gravityX.signInt()
+        val alternateSign = if (secondarySign == 0 && random.nextBoolean()) 1 else -1
+        val sideA = if (secondarySign == 0) alternateSign else secondarySign
+        val sideB = -sideA
+        val candidates = if (horizontalIsDominant) {
+            listOf(primaryX to 0, primaryX to sideA, primaryX to sideB)
+        } else {
+            listOf(0 to primaryY, sideA to primaryY, sideB to primaryY)
+        }
+
+        val occupied = BooleanArray(PIXEL_COUNT)
+        sand.forEach { occupied[index(it.x, it.y)] = true }
+        val order = sand.indices.sortedByDescending { i ->
+            sand[i].x * gravityX + sand[i].y * gravityY
+        }
+
+        order.forEach { grainIndex ->
+            val grain = sand[grainIndex]
+            occupied[index(grain.x, grain.y)] = false
+            val diagonalAllowed = random.nextFloat() < (0.35f + looseness * 0.65f)
+            val move = candidates.firstOrNull { (dx, dy) ->
+                if ((dx != primaryX || dy != primaryY) && !diagonalAllowed) return@firstOrNull false
+                val x = grain.x + dx
+                val y = grain.y + dy
+                x in 0 until SIZE && y in 0 until SIZE &&
+                    isInsideMatrix(x, y) && !occupied[index(x, y)]
+            }
+            if (move != null) {
+                grain.x += move.first
+                grain.y += move.second
+            }
+            occupied[index(grain.x, grain.y)] = true
+        }
+    }
+
+    private fun Float.signInt(): Int = when {
+        this > 0.04f -> 1
+        this < -0.04f -> -1
+        else -> 0
     }
 
     private fun renderPlasma(
@@ -383,7 +437,7 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
     }
     private data class Point2(val x: Double, val y: Double, val depth: Double)
     private data class Solid(val vertices: List<V3>, val edges: List<Pair<Int, Int>>)
-    private data class Particle(var x: Float, var y: Float, var vx: Float, var vy: Float)
+    private data class Cell(var x: Int, var y: Int)
     private data class Star(var x: Float, var y: Float, var z: Float)
 
     companion object {

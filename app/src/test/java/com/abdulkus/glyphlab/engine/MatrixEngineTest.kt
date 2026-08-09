@@ -115,12 +115,76 @@ class MatrixEngineTest {
 
     @Test
     fun glyphMapperBrightensMidtonesWithoutExceedingSdkRange() {
-        val mapped = HardwareFrameMapper.forGlyph(intArrayOf(0, 32, 128, 255))
+        val mapped = HardwareFrameMapper.forGlyph(intArrayOf(0, 32, 128, 255), 1f)
 
         assertEquals(0, mapped[0])
         assertTrue(mapped[1] > 32)
         assertTrue(mapped[2] > 128)
         assertEquals(255, mapped[3])
         assertTrue(mapped.indices.drop(1).all { index -> mapped[index - 1] <= mapped[index] })
+    }
+
+    @Test
+    fun glyphMapperPreservesMasterBrightnessRange() {
+        val tenPercentInput = intArrayOf(0, 3, 13, 26)
+        val mapped = HardwareFrameMapper.forGlyph(tenPercentInput, 0.1f)
+
+        assertEquals(0, mapped[0])
+        assertTrue(mapped.max() <= 26)
+        assertTrue(HardwareFrameMapper.forGlyph(intArrayOf(255), 0f).all { it == 0 })
+    }
+
+    @Test
+    fun cubeRemainsSparseAndReadableAtMatrixResolution() {
+        val frame = MatrixEngine(31).render(
+            MatrixConfig(
+                effect = EffectType.WIREFRAME,
+                solid = SolidType.CUBE,
+                speed = 0f,
+                accelerometer = false,
+                brightness = 1f
+            ),
+            1_000_000_000L
+        )
+
+        assertTrue(frame.count { it > 0 } in 20..42)
+        assertTrue(frame.filter { it > 0 }.distinct().size >= 4)
+    }
+
+    @Test
+    fun sandKeepsEveryGrainInsideCircularMatrix() {
+        val engine = MatrixEngine(77)
+        val config = MatrixConfig(
+            effect = EffectType.GRAVITY,
+            accelerometer = true,
+            sensorStrength = 1f,
+            speed = 1f,
+            particleCount = 40,
+            brightness = 1f
+        )
+        var frame = IntArray(MatrixEngine.PIXEL_COUNT)
+        repeat(80) { tick ->
+            frame = engine.render(
+                config,
+                1_000_000_000L + tick * 50_000_000L,
+                tiltX = 0.9f,
+                tiltY = 0.7f
+            )
+        }
+
+        assertEquals(40, frame.count { it > 0 })
+        frame.indices.filter { frame[it] > 0 }.forEach { index ->
+            assertTrue(MatrixEngine.isInsideMatrix(index % MatrixEngine.SIZE, index / MatrixEngine.SIZE))
+        }
+    }
+
+    @Test
+    fun zeroBrightnessReallyTurnsEveryLedOff() {
+        val frame = MatrixEngine(88).render(
+            MatrixConfig(effect = EffectType.WIREFRAME, brightness = 0f),
+            1_000_000_000L
+        )
+
+        assertTrue(frame.all { it == 0 })
     }
 }

@@ -340,7 +340,7 @@ private fun SettingsPanel(config: MatrixConfig, onChange: (MatrixConfig) -> Unit
                     (config.particleCount - 8) / 48f,
                     { "${(8 + it * 48).roundToInt()}" }
                 ) { onChange(config.copy(particleCount = (8 + it * 48).roundToInt())) }
-                ConfigSlider("ШЛЕЙФ", config.trail, { "${(it * 100).roundToInt()}%" }) {
+                ConfigSlider("СЫПУЧЕСТЬ", config.trail, { "${(it * 100).roundToInt()}%" }) {
                     onChange(config.copy(trail = it))
                 }
             }
