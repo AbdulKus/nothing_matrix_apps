@@ -1,5 +1,7 @@
 # Glyph Lab — Nothing Phone (4a) Pro
 
+[![Build APK and publish release](https://github.com/AbdulKus/nothing_matrix_apps/actions/workflows/build-release.yml/badge.svg)](https://github.com/AbdulKus/nothing_matrix_apps/actions/workflows/build-release.yml)
+
 Один Android‑клиент с пятью интерактивными эффектами для круглой Glyph Matrix 13×13 на Nothing Phone (4a) Pro. Эффекты можно запустить прямо из приложения, сохранить как Always‑On Glyph Toy и настраивать в интерфейсе, стилизованном под Nothing OS.
 
 ## Что внутри
