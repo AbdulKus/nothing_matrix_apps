@@ -151,8 +151,11 @@ object ClockOverlayRenderer {
         val output = BooleanArray(MatrixEngine.PIXEL_COUNT)
         val scaledWidth = virtual.width * scale
         val scaledHeight = virtual.height * scale
-        val originX = centerX - scaledWidth / 2f
-        val originY = centerY - scaledHeight / 2f
+        // centerX/centerY use LED indices (0..12), while raster math works in
+        // cell-edge coordinates. +0.5 keeps a full-size 13-column clock exactly
+        // aligned with columns 0..12 instead of shifting it by one LED.
+        val originX = centerX + 0.5f - scaledWidth / 2f
+        val originY = centerY + 0.5f - scaledHeight / 2f
 
         for (y in 0 until MatrixEngine.SIZE) {
             for (x in 0 until MatrixEngine.SIZE) {
