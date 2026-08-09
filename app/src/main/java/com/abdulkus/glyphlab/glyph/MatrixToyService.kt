@@ -106,8 +106,9 @@ class MatrixToyService : Service(), SensorEventListener {
         renderJob = scope.launch {
             while (isActive) {
                 val frame = engine.render(config, System.nanoTime(), tiltX, tiltY)
+                val hardwareFrame = HardwareFrameMapper.forGlyph(frame)
                 withContext(Dispatchers.Main.immediate) {
-                    runCatching { manager?.setMatrixFrame(frame) }
+                    runCatching { manager?.setMatrixFrame(hardwareFrame) }
                 }
                 delay(1000L / config.frameRate.coerceIn(8, 18))
             }
@@ -116,7 +117,7 @@ class MatrixToyService : Service(), SensorEventListener {
 
     private fun renderSingleFrame() {
         val frame = engine.render(config, System.nanoTime(), tiltX, tiltY)
-        runCatching { manager?.setMatrixFrame(frame) }
+        runCatching { manager?.setMatrixFrame(HardwareFrameMapper.forGlyph(frame)) }
     }
 
     override fun onSensorChanged(event: SensorEvent) {
