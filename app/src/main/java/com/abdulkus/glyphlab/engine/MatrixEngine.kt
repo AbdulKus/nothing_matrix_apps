@@ -41,7 +41,9 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
 
         val raw = when (config.effect) {
             EffectType.WIREFRAME -> renderWireframe(config, time, sensorX, sensorY)
-            EffectType.FIRE -> renderFire(config, sensorX)
+            // Fire is perceived from the rear glass and its wind direction needs
+            // the opposite horizontal sign from scene/camera movement.
+            EffectType.FIRE -> renderFire(config, -sensorX)
             EffectType.GRAVITY -> renderGravity(config, dt, sensorX, sensorY)
             EffectType.PLASMA -> renderPlasma(config, time, sensorX, sensorY)
             EffectType.STARFIELD -> renderStarfield(config, dt, sensorX, sensorY)
