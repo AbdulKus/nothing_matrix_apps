@@ -15,6 +15,7 @@ import android.os.Message
 import android.os.Messenger
 import com.abdulkus.glyphlab.data.ConfigStore
 import com.abdulkus.glyphlab.data.MatrixConfig
+import com.abdulkus.glyphlab.engine.ClockOverlayRenderer
 import com.abdulkus.glyphlab.engine.MatrixEngine
 import com.nothing.ketchum.Glyph
 import com.nothing.ketchum.GlyphMatrixManager
@@ -45,7 +46,13 @@ class MatrixToyService : Service(), SensorEventListener {
         override fun handleMessage(msg: Message) {
             if (msg.what == GlyphToy.MSG_GLYPH_TOY) {
                 when (msg.data?.getString(GlyphToy.MSG_GLYPH_TOY_DATA)) {
-                    GlyphToy.EVENT_AOD -> renderSingleFrame()
+                    GlyphToy.EVENT_AOD -> {
+                        // Nothing wakes selected AOD toys with this event every
+                        // minute. Always push an up-to-date frame here so clocks
+                        // and time-based effects refresh without a wakelock.
+                        renderSingleFrame()
+                        ensureRenderLoop()
+                    }
                     GlyphToy.EVENT_CHANGE -> {
                         config = config.copy(
                             effect = enumValues<com.abdulkus.glyphlab.data.EffectType>()[
@@ -65,11 +72,12 @@ class MatrixToyService : Service(), SensorEventListener {
     private val callback = object : GlyphMatrixManager.Callback {
         override fun onServiceConnected(componentName: ComponentName?) {
             manager?.register(Glyph.DEVICE_25111p)
-            startRenderLoop()
+            ensureRenderLoop()
         }
 
         override fun onServiceDisconnected(componentName: ComponentName?) {
             renderJob?.cancel()
+            renderJob = null
         }
     }
 
@@ -103,16 +111,20 @@ class MatrixToyService : Service(), SensorEventListener {
         return false
     }
 
-    private fun startRenderLoop() {
-        renderJob?.cancel()
+    /**
+     * Keep rendering smoothly only while Android naturally schedules this
+     * process. No wakelock or foreground service is used, so once the CPU enters
+     * sleep the loop simply stops receiving execution time. EVENT_AOD still
+     * provides the system-supported minute refresh path.
+     */
+    private fun ensureRenderLoop() {
+        if (renderJob?.isActive == true) return
         renderJob = scope.launch {
             while (isActive) {
-                // The selected AOD service lives separately from the activity.
-                // Reload preferences so its brightness and effect controls update
-                // without forcing the user to deselect and reselect the toy.
                 config = configStore.load()
                 val current = config
-                val frame = engine.render(current, System.nanoTime(), tiltX, tiltY)
+                val effectFrame = engine.render(current, System.nanoTime(), tiltX, tiltY)
+                val frame = ClockOverlayRenderer.apply(effectFrame, current)
                 val hardwareFrame = HardwareFrameMapper.forGlyph(frame, current.brightness)
                 withContext(Dispatchers.Main.immediate) {
                     runCatching { manager?.setMatrixFrame(hardwareFrame) }
@@ -124,7 +136,8 @@ class MatrixToyService : Service(), SensorEventListener {
 
     private fun renderSingleFrame() {
         config = configStore.load()
-        val frame = engine.render(config, System.nanoTime(), tiltX, tiltY)
+        val effectFrame = engine.render(config, System.nanoTime(), tiltX, tiltY)
+        val frame = ClockOverlayRenderer.apply(effectFrame, config)
         runCatching {
             manager?.setMatrixFrame(HardwareFrameMapper.forGlyph(frame, config.brightness))
         }
