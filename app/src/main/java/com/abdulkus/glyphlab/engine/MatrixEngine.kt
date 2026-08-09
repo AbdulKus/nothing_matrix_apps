@@ -66,73 +66,53 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
     ): IntArray {
         val frame = IntArray(PIXEL_COUNT)
         val solid = solid(config.solid)
-        val orbit = time * config.speed * 1.25
-
-        // The object stays fixed behind the glass. Tilt and automatic motion orbit
-        // the camera around it, producing view-dependent perspective/parallax
-        // instead of rotations in the object's local coordinate system.
-        val cameraYaw = 0.62 + orbit + tiltX * 0.48
-        val cameraPitch = (-0.42 + sin(orbit * 0.63) * 0.10 - tiltY * 0.42)
-            .coerceIn(-0.85, 0.35)
-        val cameraDistance = 5.6
-        val camera = V3(
-            x = sin(cameraYaw) * cos(cameraPitch) * cameraDistance,
-            y = sin(cameraPitch) * cameraDistance,
-            z = cos(cameraYaw) * cos(cameraPitch) * cameraDistance
-        )
-        val forward = (V3.ZERO - camera).normalized()
-        val right = forward.cross(V3.DOWN).normalized()
-        val down = right.cross(forward).normalized()
+        val auto = time * config.speed * 1.75
+        val cameraX = -0.48 - tiltY * 0.82 + if (config.autoRotateX) auto * 0.73 else 0.0
+        val cameraY = 0.62 + tiltX * 0.82 + if (config.autoRotateY) auto else 0.0
+        val cameraZ = if (config.autoRotateZ) auto * 0.61 else 0.0
 
         val points = solid.vertices.map { vertex ->
-            val fromCamera = vertex - camera
-            val viewX = fromCamera.dot(right)
-            val viewY = fromCamera.dot(down)
-            val viewDepth = fromCamera.dot(forward).coerceAtLeast(3.0)
-            // Only a little perspective is possible on 13x13. Keeping it bounded
-            // stops near edges from collapsing into a dense cluster of pixels.
-            val perspective = (cameraDistance / viewDepth).coerceIn(0.88, 1.15)
+            // Inverse camera transform: the shape stays in world space while the
+            // selected camera axes move around it. Full edges retain the bold,
+            // expressive wireframe of the earlier version.
+            val viewed = cameraView(vertex, cameraX, cameraY, cameraZ)
+            val perspective = (4.2 / (4.8 - viewed.z)).coerceIn(0.72, 1.34)
             Point2(
-                x = CENTER + viewX * perspective * 2.28,
-                y = CENTER + viewY * perspective * 2.28,
-                depth = viewDepth
+                x = CENTER + viewed.x * perspective * 2.85,
+                y = CENTER + viewed.y * perspective * 2.85,
+                depth = viewed.z
             )
         }
 
-        val visibleEdges = if (config.solid == SolidType.CUBE) {
-            cubeVisibleEdges(camera)
-        } else {
-            solid.edges.indices.toSet()
-        }
-        visibleEdges.map { solid.edges[it] }
-            .sortedByDescending { (a, b) -> (points[a].depth + points[b].depth) / 2.0 }
+        solid.edges
+            .sortedBy { (a, b) -> (points[a].depth + points[b].depth) / 2.0 }
             .forEach { (a, b) ->
                 val depth = (points[a].depth + points[b].depth) / 2.0
-                // Far edges remain visible but clearly dimmer than the near face.
-                // The previous 205..255 range became an unreadable solid blob.
-                val near = ((6.9 - depth) / 3.0).coerceIn(0.0, 1.0)
-                val level = (42 + near * 198).roundToInt()
+                val near = ((depth + 1.8) / 3.6).coerceIn(0.0, 1.0)
+                val level = (48 + near * 196).roundToInt()
                 drawLine(frame, points[a], points[b], level)
             }
 
         if (config.showVertices) {
-            visibleEdges.flatMapTo(mutableSetOf()) { edgeIndex ->
-                listOf(solid.edges[edgeIndex].first, solid.edges[edgeIndex].second)
-            }.forEach { vertexIndex ->
-                val point = points[vertexIndex]
+            points.forEach { point ->
                 put(frame, point.x.roundToInt(), point.y.roundToInt(), 255)
             }
         }
         return frame
     }
 
-    private fun cubeVisibleEdges(camera: V3): Set<Int> = buildSet {
-        // Each camera-facing cube face contributes its four outline edges.
-        // Omitting the three fully hidden edges is much clearer than drawing all
-        // twelve on a 13x13 display, where they otherwise merge into a blob.
-        addAll(if (camera.z < 0) listOf(0, 1, 2, 3) else listOf(4, 5, 6, 7))
-        addAll(if (camera.y < 0) listOf(0, 9, 4, 8) else listOf(2, 10, 6, 11))
-        addAll(if (camera.x < 0) listOf(3, 11, 7, 8) else listOf(1, 10, 5, 9))
+    private fun cameraView(v: V3, ax: Double, ay: Double, az: Double): V3 {
+        val x1 = v.x * cos(-az) - v.y * sin(-az)
+        val y1 = v.x * sin(-az) + v.y * cos(-az)
+        val z1 = v.z
+        val x2 = x1 * cos(-ay) + z1 * sin(-ay)
+        val y2 = y1
+        val z2 = -x1 * sin(-ay) + z1 * cos(-ay)
+        return V3(
+            x2,
+            y2 * cos(-ax) - z2 * sin(-ax),
+            y2 * sin(-ax) + z2 * cos(-ax)
+        )
     }
 
     private fun renderFire(config: MatrixConfig, tiltX: Float): IntArray {
@@ -186,7 +166,9 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
         resizeSand(config.particleCount.coerceIn(8, 56))
 
         val gx = if (config.accelerometer) tiltX else sin(lastNanos / 2.8e9).toFloat() * 0.24f
-        val gy = if (config.accelerometer) tiltY else 1f
+        // Verified on the rear-facing Phone (4a) Pro matrix: the physical
+        // vertical direction is the opposite of the normalized sensor Y.
+        val gy = if (config.accelerometer) -tiltY else 1f
         val magnitude = sqrt(gx * gx + gy * gy)
         if (magnitude > 0.08f) {
             sandStepAccumulator += dt * (4f + config.speed * 15f) * magnitude.coerceAtLeast(0.35f)
