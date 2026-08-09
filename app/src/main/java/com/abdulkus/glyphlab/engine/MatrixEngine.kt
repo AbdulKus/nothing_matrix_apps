@@ -141,10 +141,11 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
         tiltY: Float
     ): IntArray {
         val targetCount = config.particleCount.coerceIn(8, 56)
+        val center = CENTER.toFloat()
         while (particles.size < targetCount) {
             particles += Particle(
-                x = CENTER + (random.nextFloat() - 0.5f) * 5f,
-                y = CENTER + (random.nextFloat() - 0.5f) * 5f,
+                x = center + (random.nextFloat() - 0.5f) * 5f,
+                y = center + (random.nextFloat() - 0.5f) * 5f,
                 vx = (random.nextFloat() - 0.5f) * 2f,
                 vy = (random.nextFloat() - 0.5f) * 2f
             )
@@ -165,14 +166,14 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
             p.x += p.vx * dt * (0.6f + config.speed * 1.6f)
             p.y += p.vy * dt * (0.6f + config.speed * 1.6f)
 
-            val dx = p.x - CENTER
-            val dy = p.y - CENTER
+            val dx = p.x - center
+            val dy = p.y - center
             val distance = sqrt(dx * dx + dy * dy)
             if (distance > MATRIX_RADIUS - 0.35f) {
                 val nx = dx / distance.coerceAtLeast(0.001f)
                 val ny = dy / distance.coerceAtLeast(0.001f)
-                p.x = CENTER + nx * (MATRIX_RADIUS - 0.4f)
-                p.y = CENTER + ny * (MATRIX_RADIUS - 0.4f)
+                p.x = center + nx * (MATRIX_RADIUS - 0.4f)
+                p.y = center + ny * (MATRIX_RADIUS - 0.4f)
                 val normalVelocity = p.vx * nx + p.vy * ny
                 if (normalVelocity > 0f) {
                     p.vx -= (1f + bounce) * normalVelocity * nx
