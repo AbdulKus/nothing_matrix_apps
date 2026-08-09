@@ -36,6 +36,7 @@ class MatrixToyService : Service(), SensorEventListener {
     private var manager: GlyphMatrixManager? = null
     private lateinit var configStore: ConfigStore
     private lateinit var sensorManager: SensorManager
+    private var motionSensor: Sensor? = null
     private var config = MatrixConfig()
     private var tiltX = 0f
     private var tiltY = 0f
@@ -51,6 +52,7 @@ class MatrixToyService : Service(), SensorEventListener {
                                 (config.effect.ordinal + 1) % enumValues<com.abdulkus.glyphlab.data.EffectType>().size
                             ]
                         )
+                        configStore.save(config)
                     }
                 }
             } else {
@@ -75,15 +77,15 @@ class MatrixToyService : Service(), SensorEventListener {
         super.onCreate()
         configStore = ConfigStore(this)
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        motionSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
+            ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     }
 
     override fun onBind(intent: Intent?): IBinder {
         config = configStore.load()
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        if (config.accelerometer) {
-            sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let {
-                sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
-            }
+        motionSensor?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
         }
         manager = GlyphMatrixManager.getInstance(applicationContext)
         manager?.init(callback)
@@ -105,25 +107,36 @@ class MatrixToyService : Service(), SensorEventListener {
         renderJob?.cancel()
         renderJob = scope.launch {
             while (isActive) {
-                val frame = engine.render(config, System.nanoTime(), tiltX, tiltY)
-                val hardwareFrame = HardwareFrameMapper.forGlyph(frame)
+                // The selected AOD service lives separately from the activity.
+                // Reload preferences so its brightness and effect controls update
+                // without forcing the user to deselect and reselect the toy.
+                config = configStore.load()
+                val current = config
+                val frame = engine.render(current, System.nanoTime(), tiltX, tiltY)
+                val hardwareFrame = HardwareFrameMapper.forGlyph(frame, current.brightness)
                 withContext(Dispatchers.Main.immediate) {
                     runCatching { manager?.setMatrixFrame(hardwareFrame) }
                 }
-                delay(1000L / config.frameRate.coerceIn(8, 18))
+                delay(1000L / current.frameRate.coerceIn(8, 18))
             }
         }
     }
 
     private fun renderSingleFrame() {
+        config = configStore.load()
         val frame = engine.render(config, System.nanoTime(), tiltX, tiltY)
-        runCatching { manager?.setMatrixFrame(HardwareFrameMapper.forGlyph(frame)) }
+        runCatching {
+            manager?.setMatrixFrame(HardwareFrameMapper.forGlyph(frame, config.brightness))
+        }
     }
 
     override fun onSensorChanged(event: SensorEvent) {
+        if (event.sensor.type != motionSensor?.type) return
         val alpha = 0.13f
-        val x = (event.values[0] / SensorManager.GRAVITY_EARTH).coerceIn(-1f, 1f)
-        val y = (event.values[1] / SensorManager.GRAVITY_EARTH).coerceIn(-1f, 1f)
+        val isGravityVector = event.sensor.type == Sensor.TYPE_GRAVITY
+        val direction = if (isGravityVector) -1f else 1f
+        val x = (event.values[0] / SensorManager.GRAVITY_EARTH * direction).coerceIn(-1f, 1f)
+        val y = (event.values[1] / SensorManager.GRAVITY_EARTH * direction).coerceIn(-1f, 1f)
         tiltX += alpha * (x - tiltX)
         tiltY += alpha * (y - tiltY)
     }
