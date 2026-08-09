@@ -3,8 +3,10 @@ package com.abdulkus.glyphlab.glyph
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
-/** Maps preview luminance to the brighter response needed by the physical LEDs. */
+/** Maps 8-bit preview luminance to the Glyph Matrix's 12-bit LED levels. */
 object HardwareFrameMapper {
+    private const val PREVIEW_MAX = 255.0
+    private const val MATRIX_MAX = 4095
     private const val OUTPUT_GAMMA = 0.70
 
     fun forGlyph(frame: IntArray, masterBrightness: Float): IntArray {
@@ -12,17 +14,19 @@ object HardwareFrameMapper {
         if (master == 0.0) return IntArray(frame.size)
 
         return IntArray(frame.size) { index ->
-            val input = frame[index].coerceIn(0, 255)
+            val input = frame[index].coerceIn(0, PREVIEW_MAX.toInt())
             if (input == 0) {
                 0
             } else {
-                // MatrixEngine has already applied master brightness. Recover the
-                // source level, shape its midtones, then apply master once at the
-                // very end. This keeps 10% actually near 10% instead of the old
-                // gamma curve turning it into roughly 35%.
-                val source = (input / 255.0 / master).coerceIn(0.0, 1.0)
-                (255.0 * source.pow(OUTPUT_GAMMA) * master)
-                    .roundToInt().coerceIn(1, 255)
+                // MatrixEngine already applies the user's master brightness for
+                // the on-screen preview. Recover the source luminance, shape the
+                // midtones, then apply master once to the physical 12-bit range.
+                // This keeps preview rendering 8-bit while allowing the Glyph
+                // Matrix to actually reach its full output instead of stopping at
+                // 255/4095 (~6.2% of the available LED level).
+                val source = (input / PREVIEW_MAX / master).coerceIn(0.0, 1.0)
+                (MATRIX_MAX * source.pow(OUTPUT_GAMMA) * master)
+                    .roundToInt().coerceIn(1, MATRIX_MAX)
             }
         }
     }
