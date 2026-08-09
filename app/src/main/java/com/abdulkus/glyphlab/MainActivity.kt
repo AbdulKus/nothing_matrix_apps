@@ -198,7 +198,7 @@ private fun GlyphLabScreen(
         }
 
         Text(
-            "Пока Android даёт AOD-процессу CPU, эффекты идут плавно. Во сне системный EVENT_AOD гарантированно обновляет кадр и часы раз в минуту — без wakelock.",
+            "Если включить часы во время сна, при выключении экрана эффект сменится на HH/MM, а после пробуждения анимация вернётся. Системный EVENT_AOD обновляет время раз в минуту — без wakelock.",
             color = Muted,
             fontSize = 11.sp,
             lineHeight = 16.sp,
@@ -403,53 +403,9 @@ private fun SettingsPanel(config: MatrixConfig, onChange: (MatrixConfig) -> Unit
 
 @Composable
 private fun ClockSettings(config: MatrixConfig, onChange: (MatrixConfig) -> Unit) {
-    Label("ЧАСЫ / ПОВЕРХ ЛЮБОГО ЭФФЕКТА")
-    ToggleRow("Показывать часы", config.clockEnabled) {
-        onChange(config.copy(clockEnabled = it))
-    }
-    if (!config.clockEnabled) return
-
-    Label("КОМПОНОВКА")
-    ChoiceRow(
-        items = listOf(false, true),
-        selected = config.clockTwoLines,
-        title = { if (it) "2 СТРОКИ" else "1 СТРОКА" }
-    ) { onChange(config.copy(clockTwoLines = it)) }
-
-    ConfigSlider(
-        "РАЗМЕР ЧАСОВ",
-        config.clockScale,
-        { "${(65 + it * 35).roundToInt()}%" }
-    ) { onChange(config.copy(clockScale = it)) }
-
-    ConfigSlider(
-        "ПОЗИЦИЯ X",
-        config.clockPositionX,
-        ::positionLabel
-    ) { onChange(config.copy(clockPositionX = it)) }
-
-    ConfigSlider(
-        "ПОЗИЦИЯ Y",
-        config.clockPositionY,
-        ::positionLabel
-    ) { onChange(config.copy(clockPositionY = it)) }
-
-    ConfigSlider(
-        "ЧЁРНАЯ ОБВОДКА",
-        config.clockOutline,
-        { if (it <= 0.001f) "ВЫКЛ" else "${(it * 100).roundToInt()}%" }
-    ) { onChange(config.copy(clockOutline = it)) }
-
-    ToggleRow("Инвертировать цифры", config.clockInvert) {
-        onChange(config.copy(clockInvert = it))
-    }
-}
-
-private fun positionLabel(value: Float): String {
-    val offset = ((value - 0.5f) * 12f).roundToInt()
-    return when {
-        offset > 0 -> "+$offset"
-        else -> "$offset"
+    Label("РЕЖИМ СНА")
+    ToggleRow("Часы во время сна", config.sleepClockEnabled) {
+        onChange(config.copy(sleepClockEnabled = it))
     }
 }
 

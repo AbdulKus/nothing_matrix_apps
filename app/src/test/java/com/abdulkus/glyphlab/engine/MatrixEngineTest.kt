@@ -159,6 +159,18 @@ class MatrixEngineTest {
     }
 
     @Test
+    fun glyphToyCompensatesOnlyTheSystemAodOutputPath() {
+        val frame = intArrayOf(0, 32, 128, 255)
+        val app = HardwareFrameMapper.forGlyph(frame, 1f)
+        val toy = HardwareFrameMapper.forGlyphToy(frame, 1f)
+
+        assertEquals(0, toy[0])
+        assertTrue(toy.indices.drop(1).all { index ->
+            kotlin.math.abs(toy[index] - app[index] * 4) <= 2
+        })
+    }
+
+    @Test
     fun glyphMapperPreservesMasterBrightnessRange() {
         val tenPercentInput = intArrayOf(0, 3, 13, 26)
         val mapped = HardwareFrameMapper.forGlyph(tenPercentInput, 0.1f)

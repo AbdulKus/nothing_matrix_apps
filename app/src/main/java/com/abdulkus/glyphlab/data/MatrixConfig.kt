@@ -30,11 +30,5 @@ data class MatrixConfig(
     val particleCount: Int = 28,
     val showVertices: Boolean = true,
     val frameRate: Int = 24,
-    val clockEnabled: Boolean = false,
-    val clockTwoLines: Boolean = false,
-    val clockScale: Float = 0.65f,
-    val clockPositionX: Float = 0.5f,
-    val clockPositionY: Float = 0.5f,
-    val clockOutline: Float = 0f,
-    val clockInvert: Boolean = false
+    val sleepClockEnabled: Boolean = false
 )
