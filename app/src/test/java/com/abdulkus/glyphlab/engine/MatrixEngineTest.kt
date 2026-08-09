@@ -80,6 +80,39 @@ class MatrixEngineTest {
     }
 
     @Test
+    fun positiveNormalizedXDeflectsFireTowardMatrixRight() {
+        fun renderWithTilt(tiltX: Float): IntArray {
+            val engine = MatrixEngine(606)
+            val config = MatrixConfig(
+                effect = EffectType.FIRE,
+                accelerometer = true,
+                sensorStrength = 1f,
+                speed = 0.7f,
+                intensity = 0.9f,
+                brightness = 1f
+            )
+            var frame = IntArray(MatrixEngine.PIXEL_COUNT)
+            repeat(28) { tick ->
+                frame = engine.render(
+                    config,
+                    2_000_000_000L + tick * 41_000_000L,
+                    tiltX = tiltX,
+                    tiltY = 0f
+                )
+            }
+            return frame
+        }
+
+        fun horizontalCenter(frame: IntArray): Double {
+            val total = frame.sum().coerceAtLeast(1)
+            return frame.indices.sumOf { index -> (index % MatrixEngine.SIZE) * frame[index] }
+                .toDouble() / total
+        }
+
+        assertTrue(horizontalCenter(renderWithTilt(0.9f)) > horizontalCenter(renderWithTilt(-0.9f)))
+    }
+
+    @Test
     fun zeroSpeedKeepsWireframeStill() {
         val engine = MatrixEngine(9)
         val config = MatrixConfig(
