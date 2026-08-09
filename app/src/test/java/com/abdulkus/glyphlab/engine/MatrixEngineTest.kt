@@ -147,13 +147,14 @@ class MatrixEngineTest {
     }
 
     @Test
-    fun glyphMapperBrightensMidtonesWithoutExceedingSdkRange() {
+    fun glyphMapperUsesFullTwelveBitRange() {
         val mapped = HardwareFrameMapper.forGlyph(intArrayOf(0, 32, 128, 255), 1f)
 
         assertEquals(0, mapped[0])
         assertTrue(mapped[1] > 32)
         assertTrue(mapped[2] > 128)
-        assertEquals(255, mapped[3])
+        assertEquals(4095, mapped[3])
+        assertTrue(mapped.all { it in 0..4095 })
         assertTrue(mapped.indices.drop(1).all { index -> mapped[index - 1] <= mapped[index] })
     }
 
@@ -163,7 +164,8 @@ class MatrixEngineTest {
         val mapped = HardwareFrameMapper.forGlyph(tenPercentInput, 0.1f)
 
         assertEquals(0, mapped[0])
-        assertTrue(mapped.max() <= 26)
+        assertTrue(mapped.max() <= 410)
+        assertEquals(410, mapped.last())
         assertTrue(HardwareFrameMapper.forGlyph(intArrayOf(255), 0f).all { it == 0 })
     }
 
