@@ -42,12 +42,12 @@ adb shell settings put global nt_glyph_interface_debug_enable 1
 
 Проект содержит официальный `glyph-matrix-sdk-2.0.aar`, поэтому дополнительных ручных загрузок не требуется.
 
-Релизный APK подписывается открытым ключом проекта из `app/signing`. Он предназначен для удобных обновлений при установке с GitHub. Для Google Play или другого магазина создайте приватный ключ и передайте пароли через `GLYPHLAB_STORE_PASSWORD` и `GLYPHLAB_KEY_PASSWORD`.
+GitHub Actions публикует устанавливаемый debug‑APK и не хранит приватный ключ в публичном репозитории. Для постоянной release‑подписи или публикации в магазине создайте собственный keystore и передавайте его в CI только через GitHub Actions Secrets.
 
 ## Автосборка
 
 - Pull request: тесты, сборка APK и Actions artifact.
-- Push в `main`: тесты, подписанный APK и обновление prerelease `nightly`.
+- Push в `main`: тесты, устанавливаемый APK и обновление prerelease `nightly`.
 - Тег `v*`: отдельный стабильный GitHub Release.
 
 ## Основа и совместимость

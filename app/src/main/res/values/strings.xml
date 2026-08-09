@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Glyph Lab</string>
+    <string name="toy_name">Glyph Lab AOD</string>
+    <string name="toy_summary">The active Glyph Lab effect on the 13×13 matrix</string>
+</resources>

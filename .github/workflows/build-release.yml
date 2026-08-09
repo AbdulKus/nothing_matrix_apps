@@ -1,0 +1,78 @@
+name: Build APK and publish release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: glyph-lab-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run tests and build installable APK
+        run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
+
+      - name: Name APK
+        id: apk
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            RELEASE_LABEL="${GITHUB_REF_NAME}"
+          else
+            RELEASE_LABEL="nightly"
+          fi
+          APK_NAME="GlyphLab-${RELEASE_LABEL}.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "${APK_NAME}"
+          echo "name=${APK_NAME}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload Actions artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.apk.outputs.name }}
+          path: ${{ steps.apk.outputs.name }}
+          if-no-files-found: error
+
+      - name: Move rolling nightly tag
+        if: github.event_name != 'pull_request' && github.ref_type == 'branch'
+        shell: bash
+        run: |
+          git tag -f nightly "${GITHUB_SHA}"
+          git push --force origin refs/tags/nightly
+
+      - name: Publish GitHub Release
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'nightly' }}
+          name: ${{ github.ref_type == 'tag' && format('Glyph Lab {0}', github.ref_name) || 'Glyph Lab — свежая сборка' }}
+          prerelease: ${{ github.ref_type != 'tag' }}
+          make_latest: ${{ github.ref_type == 'tag' }}
+          files: ${{ steps.apk.outputs.name }}
+          overwrite_files: true
+          body: |
+            Устанавливаемый APK для Nothing Phone (4a) Pro.
+
+            Nightly обновляется автоматически после каждого успешного изменения в `main`.
