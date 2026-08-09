@@ -11,6 +11,9 @@ class ConfigStore(context: Context) {
         effect = prefs.enum(KEY_EFFECT, EffectType.WIREFRAME),
         solid = prefs.enum(KEY_SOLID, SolidType.CUBE),
         speed = prefs.getFloat(KEY_SPEED, 0.42f),
+        autoRotateX = prefs.getBoolean(KEY_AUTO_ROTATE_X, true),
+        autoRotateY = prefs.getBoolean(KEY_AUTO_ROTATE_Y, true),
+        autoRotateZ = prefs.getBoolean(KEY_AUTO_ROTATE_Z, false),
         accelerometer = prefs.getBoolean(KEY_ACCELEROMETER, true),
         sensorStrength = prefs.getFloat(KEY_SENSOR_STRENGTH, 0.75f),
         brightness = prefs.getFloat(KEY_BRIGHTNESS, 0.9f),
@@ -26,6 +29,9 @@ class ConfigStore(context: Context) {
             .putString(KEY_EFFECT, config.effect.name)
             .putString(KEY_SOLID, config.solid.name)
             .putFloat(KEY_SPEED, config.speed)
+            .putBoolean(KEY_AUTO_ROTATE_X, config.autoRotateX)
+            .putBoolean(KEY_AUTO_ROTATE_Y, config.autoRotateY)
+            .putBoolean(KEY_AUTO_ROTATE_Z, config.autoRotateZ)
             .putBoolean(KEY_ACCELEROMETER, config.accelerometer)
             .putFloat(KEY_SENSOR_STRENGTH, config.sensorStrength)
             .putFloat(KEY_BRIGHTNESS, config.brightness)
@@ -49,6 +55,9 @@ class ConfigStore(context: Context) {
         const val KEY_EFFECT = "effect"
         const val KEY_SOLID = "solid"
         const val KEY_SPEED = "speed"
+        const val KEY_AUTO_ROTATE_X = "auto_rotate_x"
+        const val KEY_AUTO_ROTATE_Y = "auto_rotate_y"
+        const val KEY_AUTO_ROTATE_Z = "auto_rotate_z"
         const val KEY_ACCELEROMETER = "accelerometer"
         const val KEY_SENSOR_STRENGTH = "sensor_strength"
         const val KEY_BRIGHTNESS = "brightness"

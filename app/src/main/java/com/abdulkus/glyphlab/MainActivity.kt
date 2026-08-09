@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -325,6 +326,22 @@ private fun SettingsPanel(config: MatrixConfig, onChange: (MatrixConfig) -> Unit
             ToggleRow("Яркие вершины", config.showVertices) {
                 onChange(config.copy(showVertices = it))
             }
+            Spacer(Modifier.height(8.dp))
+            Label("ОСИ АВТОВРАЩЕНИЯ")
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
+                AxisChoice("X", config.autoRotateX) {
+                    onChange(config.copy(autoRotateX = !config.autoRotateX))
+                }
+                AxisChoice("Y", config.autoRotateY) {
+                    onChange(config.copy(autoRotateY = !config.autoRotateY))
+                }
+                AxisChoice("Z", config.autoRotateZ) {
+                    onChange(config.copy(autoRotateZ = !config.autoRotateZ))
+                }
+            }
         }
 
         when (config.effect) {
@@ -424,6 +441,24 @@ private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
             )
         )
     }
+}
+
+@Composable
+private fun RowScope.AxisChoice(label: String, checked: Boolean, onClick: () -> Unit) {
+    Text(
+        text = if (checked) "✓ $label" else label,
+        color = if (checked) Black else White,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .weight(1f)
+            .clip(RoundedCornerShape(2.dp))
+            .background(if (checked) White else PanelLight)
+            .border(1.dp, if (checked) White else Line, RoundedCornerShape(2.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp)
+    )
 }
 
 @Composable

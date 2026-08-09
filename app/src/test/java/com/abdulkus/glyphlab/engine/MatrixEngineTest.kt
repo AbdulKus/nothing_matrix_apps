@@ -46,7 +46,7 @@ class MatrixEngineTest {
     }
 
     @Test
-    fun positiveAndroidYMovesSandTowardMatrixBottom() {
+    fun negativeNormalizedYMovesSandTowardMatrixBottom() {
         fun renderWithTilt(tiltY: Float): IntArray {
             val engine = MatrixEngine(2026)
             val config = MatrixConfig(
@@ -76,7 +76,7 @@ class MatrixEngineTest {
                 .toDouble() / total
         }
 
-        assertTrue(verticalCenter(renderWithTilt(0.8f)) > verticalCenter(renderWithTilt(-0.8f)))
+        assertTrue(verticalCenter(renderWithTilt(-0.8f)) > verticalCenter(renderWithTilt(0.8f)))
     }
 
     @Test
@@ -135,7 +135,7 @@ class MatrixEngineTest {
     }
 
     @Test
-    fun cubeRemainsSparseAndReadableAtMatrixResolution() {
+    fun cubeKeepsFullExpressiveWireframeAtMatrixResolution() {
         val frame = MatrixEngine(31).render(
             MatrixConfig(
                 effect = EffectType.WIREFRAME,
@@ -147,8 +147,46 @@ class MatrixEngineTest {
             1_000_000_000L
         )
 
-        assertTrue(frame.count { it > 0 } in 20..42)
+        assertTrue(frame.count { it > 0 } in 24..60)
         assertTrue(frame.filter { it > 0 }.distinct().size >= 4)
+    }
+
+    @Test
+    fun disabledAutoRotationAxesKeepCameraStillAtNonZeroSpeed() {
+        val config = MatrixConfig(
+            effect = EffectType.WIREFRAME,
+            solid = SolidType.CUBE,
+            speed = 1f,
+            autoRotateX = false,
+            autoRotateY = false,
+            autoRotateZ = false,
+            accelerometer = false,
+            brightness = 1f
+        )
+        val first = MatrixEngine(41).render(config, 1_000_000_000L)
+        val later = MatrixEngine(41).render(config, 8_000_000_000L)
+
+        assertTrue(first.contentEquals(later))
+    }
+
+    @Test
+    fun everySelectedAutoRotationAxisAnimatesIndependently() {
+        listOf("X", "Y", "Z").forEach { axis ->
+            val config = MatrixConfig(
+                effect = EffectType.WIREFRAME,
+                solid = SolidType.CUBE,
+                speed = 0.7f,
+                autoRotateX = axis == "X",
+                autoRotateY = axis == "Y",
+                autoRotateZ = axis == "Z",
+                accelerometer = false,
+                brightness = 1f
+            )
+            val first = MatrixEngine(42).render(config, 1_000_000_000L)
+            val later = MatrixEngine(42).render(config, 3_700_000_000L)
+
+            assertFalse("Axis $axis should animate", first.contentEquals(later))
+        }
     }
 
     @Test
