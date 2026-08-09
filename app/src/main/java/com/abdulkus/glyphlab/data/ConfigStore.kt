@@ -22,13 +22,12 @@ class ConfigStore(context: Context) {
         particleCount = prefs.getInt(KEY_PARTICLES, 28),
         showVertices = prefs.getBoolean(KEY_VERTICES, true),
         frameRate = prefs.getInt(KEY_FRAME_RATE, 24),
-        clockEnabled = prefs.getBoolean(KEY_CLOCK_ENABLED, false),
-        clockTwoLines = prefs.getBoolean(KEY_CLOCK_TWO_LINES, false),
-        clockScale = prefs.getFloat(KEY_CLOCK_SCALE, 0.65f),
-        clockPositionX = prefs.getFloat(KEY_CLOCK_X, 0.5f),
-        clockPositionY = prefs.getFloat(KEY_CLOCK_Y, 0.5f),
-        clockOutline = prefs.getFloat(KEY_CLOCK_OUTLINE, 0f),
-        clockInvert = prefs.getBoolean(KEY_CLOCK_INVERT, false)
+        sleepClockEnabled = prefs.getBoolean(
+            KEY_SLEEP_CLOCK_ENABLED,
+            // Migrate the single useful value from versions that exposed the
+            // configurable clock overlay.
+            prefs.getBoolean(KEY_LEGACY_CLOCK_ENABLED, false)
+        )
     )
 
     fun save(config: MatrixConfig) {
@@ -47,13 +46,7 @@ class ConfigStore(context: Context) {
             .putInt(KEY_PARTICLES, config.particleCount)
             .putBoolean(KEY_VERTICES, config.showVertices)
             .putInt(KEY_FRAME_RATE, config.frameRate)
-            .putBoolean(KEY_CLOCK_ENABLED, config.clockEnabled)
-            .putBoolean(KEY_CLOCK_TWO_LINES, config.clockTwoLines)
-            .putFloat(KEY_CLOCK_SCALE, config.clockScale)
-            .putFloat(KEY_CLOCK_X, config.clockPositionX)
-            .putFloat(KEY_CLOCK_Y, config.clockPositionY)
-            .putFloat(KEY_CLOCK_OUTLINE, config.clockOutline)
-            .putBoolean(KEY_CLOCK_INVERT, config.clockInvert)
+            .putBoolean(KEY_SLEEP_CLOCK_ENABLED, config.sleepClockEnabled)
             .apply()
     }
 
@@ -80,12 +73,7 @@ class ConfigStore(context: Context) {
         const val KEY_PARTICLES = "particles"
         const val KEY_VERTICES = "vertices"
         const val KEY_FRAME_RATE = "frame_rate"
-        const val KEY_CLOCK_ENABLED = "clock_enabled"
-        const val KEY_CLOCK_TWO_LINES = "clock_two_lines"
-        const val KEY_CLOCK_SCALE = "clock_scale"
-        const val KEY_CLOCK_X = "clock_x"
-        const val KEY_CLOCK_Y = "clock_y"
-        const val KEY_CLOCK_OUTLINE = "clock_outline"
-        const val KEY_CLOCK_INVERT = "clock_invert"
+        const val KEY_SLEEP_CLOCK_ENABLED = "sleep_clock_enabled"
+        const val KEY_LEGACY_CLOCK_ENABLED = "clock_enabled"
     }
 }

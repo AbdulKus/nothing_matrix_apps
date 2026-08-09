@@ -1,9 +1,11 @@
 package com.abdulkus.glyphlab.glyph
 
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -13,10 +15,11 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.Message
 import android.os.Messenger
+import android.os.PowerManager
 import com.abdulkus.glyphlab.data.ConfigStore
 import com.abdulkus.glyphlab.data.MatrixConfig
-import com.abdulkus.glyphlab.engine.ClockOverlayRenderer
 import com.abdulkus.glyphlab.engine.MatrixEngine
+import com.abdulkus.glyphlab.engine.SleepClockRenderer
 import com.nothing.ketchum.Glyph
 import com.nothing.ketchum.GlyphMatrixManager
 import com.nothing.ketchum.GlyphToy
@@ -37,10 +40,26 @@ class MatrixToyService : Service(), SensorEventListener {
     private var manager: GlyphMatrixManager? = null
     private lateinit var configStore: ConfigStore
     private lateinit var sensorManager: SensorManager
+    private lateinit var powerManager: PowerManager
     private var motionSensor: Sensor? = null
+    private var screenReceiverRegistered = false
     private var config = MatrixConfig()
     private var tiltX = 0f
     private var tiltY = 0f
+
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_OFF,
+                Intent.ACTION_SCREEN_ON -> {
+                    // Swap the frame immediately instead of waiting for the
+                    // next animation tick or the next minute-level AOD event.
+                    renderSingleFrame()
+                    ensureRenderLoop()
+                }
+            }
+        }
+    }
 
     private val messageHandler = object : Handler(Looper.getMainLooper()) {
         override fun handleMessage(msg: Message) {
@@ -85,6 +104,7 @@ class MatrixToyService : Service(), SensorEventListener {
         super.onCreate()
         configStore = ConfigStore(this)
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         motionSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
             ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     }
@@ -94,6 +114,17 @@ class MatrixToyService : Service(), SensorEventListener {
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         motionSensor?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+        }
+        if (!screenReceiverRegistered) {
+            registerReceiver(
+                screenReceiver,
+                IntentFilter().apply {
+                    addAction(Intent.ACTION_SCREEN_OFF)
+                    addAction(Intent.ACTION_SCREEN_ON)
+                },
+                Context.RECEIVER_NOT_EXPORTED
+            )
+            screenReceiverRegistered = true
         }
         manager = GlyphMatrixManager.getInstance(applicationContext)
         manager?.init(callback)
@@ -105,10 +136,16 @@ class MatrixToyService : Service(), SensorEventListener {
         renderJob = null
         scope.cancel()
         sensorManager.unregisterListener(this)
+        unregisterScreenReceiver()
         runCatching { manager?.turnOff() }
         runCatching { manager?.unInit() }
         manager = null
         return false
+    }
+
+    override fun onDestroy() {
+        unregisterScreenReceiver()
+        super.onDestroy()
     }
 
     /**
@@ -123,9 +160,8 @@ class MatrixToyService : Service(), SensorEventListener {
             while (isActive) {
                 config = configStore.load()
                 val current = config
-                val effectFrame = engine.render(current, System.nanoTime(), tiltX, tiltY)
-                val frame = ClockOverlayRenderer.apply(effectFrame, current)
-                val hardwareFrame = HardwareFrameMapper.forGlyph(frame, current.brightness)
+                val frame = frameForCurrentState(current)
+                val hardwareFrame = HardwareFrameMapper.forGlyphToy(frame, current.brightness)
                 withContext(Dispatchers.Main.immediate) {
                     runCatching { manager?.setMatrixFrame(hardwareFrame) }
                 }
@@ -136,11 +172,23 @@ class MatrixToyService : Service(), SensorEventListener {
 
     private fun renderSingleFrame() {
         config = configStore.load()
-        val effectFrame = engine.render(config, System.nanoTime(), tiltX, tiltY)
-        val frame = ClockOverlayRenderer.apply(effectFrame, config)
+        val frame = frameForCurrentState(config)
         runCatching {
-            manager?.setMatrixFrame(HardwareFrameMapper.forGlyph(frame, config.brightness))
+            manager?.setMatrixFrame(HardwareFrameMapper.forGlyphToy(frame, config.brightness))
         }
+    }
+
+    private fun frameForCurrentState(current: MatrixConfig): IntArray =
+        if (current.sleepClockEnabled && !powerManager.isInteractive) {
+            SleepClockRenderer.render()
+        } else {
+            engine.render(current, System.nanoTime(), tiltX, tiltY)
+        }
+
+    private fun unregisterScreenReceiver() {
+        if (!screenReceiverRegistered) return
+        runCatching { unregisterReceiver(screenReceiver) }
+        screenReceiverRegistered = false
     }
 
     override fun onSensorChanged(event: SensorEvent) {
