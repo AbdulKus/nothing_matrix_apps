@@ -121,6 +121,6 @@ class MatrixEngineTest {
         assertTrue(mapped[1] > 32)
         assertTrue(mapped[2] > 128)
         assertEquals(255, mapped[3])
-        assertTrue(mapped.zipWithNext().all { (a, b) -> a <= b })
+        assertTrue(mapped.indices.drop(1).all { index -> mapped[index - 1] <= mapped[index] })
     }
 }
