@@ -7,6 +7,7 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import com.abdulkus.glyphlab.data.MatrixConfig
+import com.abdulkus.glyphlab.engine.ClockOverlayRenderer
 import com.abdulkus.glyphlab.engine.MatrixEngine
 import com.nothing.ketchum.Glyph
 import com.nothing.ketchum.GlyphMatrixManager
@@ -76,7 +77,8 @@ class GlyphRuntime(context: Context) : SensorEventListener {
             loop = scope.launch {
                 while (isActive) {
                     val current = config
-                    val next = engine.render(current, System.nanoTime(), tiltX, tiltY)
+                    val effectFrame = engine.render(current, System.nanoTime(), tiltX, tiltY)
+                    val next = ClockOverlayRenderer.apply(effectFrame, current)
                     _frame.value = next
                     if (outputEnabled && _connection.value == GlyphConnection.CONNECTED) {
                         val hardwareFrame = HardwareFrameMapper.forGlyph(next, current.brightness)
