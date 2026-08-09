@@ -1,8 +1,10 @@
 package com.abdulkus.glyphlab
 
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -186,21 +188,7 @@ private fun GlyphLabScreen(
         }
 
         Button(
-            onClick = {
-                val intent = Intent().apply {
-                    component = ComponentName(
-                        "com.nothing.thirdparty",
-                        "com.nothing.thirdparty.matrix.toys.manager.ToysManagerActivity"
-                    )
-                }
-                runCatching { context.startActivity(intent) }.onFailure {
-                    Toast.makeText(
-                        context,
-                        "Откройте: Настройки → Glyph Interface → Glyph Toys",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-            },
+            onClick = { openGlyphToyManager(context) },
             colors = ButtonDefaults.buttonColors(containerColor = PanelLight, contentColor = White),
             shape = RoundedCornerShape(3.dp),
             modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(48.dp)
@@ -470,4 +458,40 @@ private fun <T> ChoiceRow(
 @Composable
 private fun Label(text: String) {
     Text(text, color = Muted, fontSize = 10.sp, letterSpacing = 0.7.sp)
+}
+
+private fun openGlyphToyManager(context: Context) {
+    // Phone (4a) Pro has a dedicated AOD selector. Older/other matrix devices
+    // expose the generic toy manager documented by Nothing.
+    val managerComponents = listOf(
+        ComponentName(
+            "com.nothing.thirdparty",
+            "com.nothing.thirdparty.matrix.toys.manager.AodToySelectActivity"
+        ),
+        ComponentName(
+            "com.nothing.thirdparty",
+            "com.nothing.thirdparty.matrix.toys.manager.ToysManagerActivity"
+        )
+    )
+
+    managerComponents.forEach { component ->
+        val opened = runCatching {
+            context.startActivity(Intent().setComponent(component))
+            true
+        }.getOrDefault(false)
+        if (opened) return
+    }
+
+    val glyphSettingsOpened = runCatching {
+        context.startActivity(Intent("android.settings.GLYPH_INTERFACE_SETTINGS"))
+        true
+    }.getOrDefault(false)
+    if (glyphSettingsOpened) return
+
+    context.startActivity(Intent(Settings.ACTION_SETTINGS))
+    Toast.makeText(
+        context,
+        "Откройте: Glyph Interface → Flip to Glyph → Always-on Glyph Toy",
+        Toast.LENGTH_LONG
+    ).show()
 }

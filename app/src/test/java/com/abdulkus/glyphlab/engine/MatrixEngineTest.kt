@@ -42,4 +42,54 @@ class MatrixEngineTest {
             assertTrue("$solid should have a readable wireframe", frame.count { it > 0 } >= 10)
         }
     }
+
+    @Test
+    fun positiveAndroidYMovesSandTowardMatrixBottom() {
+        fun renderWithTilt(tiltY: Float): IntArray {
+            val engine = MatrixEngine(2026)
+            val config = MatrixConfig(
+                effect = EffectType.GRAVITY,
+                accelerometer = true,
+                sensorStrength = 1f,
+                speed = 0.55f,
+                trail = 0f,
+                particleCount = 40,
+                brightness = 1f
+            )
+            var frame = IntArray(MatrixEngine.PIXEL_COUNT)
+            repeat(14) { tick ->
+                frame = engine.render(
+                    config,
+                    4_000_000_000L + tick * 41_000_000L,
+                    tiltX = 0f,
+                    tiltY = tiltY
+                )
+            }
+            return frame
+        }
+
+        fun verticalCenter(frame: IntArray): Double {
+            val total = frame.sum().coerceAtLeast(1)
+            return frame.indices.sumOf { index -> (index / MatrixEngine.SIZE) * frame[index] }
+                .toDouble() / total
+        }
+
+        assertTrue(verticalCenter(renderWithTilt(0.8f)) > verticalCenter(renderWithTilt(-0.8f)))
+    }
+
+    @Test
+    fun zeroSpeedKeepsWireframeStill() {
+        val engine = MatrixEngine(9)
+        val config = MatrixConfig(
+            effect = EffectType.WIREFRAME,
+            solid = SolidType.CUBE,
+            speed = 0f,
+            accelerometer = false,
+            brightness = 1f
+        )
+
+        val first = engine.render(config, 1_000_000_000L)
+        val muchLater = engine.render(config, 20_000_000_000L)
+        assertTrue(first.contentEquals(muchLater))
+    }
 }

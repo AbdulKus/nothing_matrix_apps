@@ -34,12 +34,14 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
         }
         lastNanos = timeNanos
 
-        val sensorX = if (config.accelerometer) tiltX * config.sensorStrength else 0f
+        // The LEDs are observed from the back of the phone, so their horizontal
+        // direction is mirrored relative to Android's screen coordinate system.
+        val sensorX = if (config.accelerometer) -tiltX * config.sensorStrength else 0f
         val sensorY = if (config.accelerometer) tiltY * config.sensorStrength else 0f
 
         val raw = when (config.effect) {
             EffectType.WIREFRAME -> renderWireframe(config, time, sensorX, sensorY)
-            EffectType.FIRE -> renderFire(config, sensorX, sensorY)
+            EffectType.FIRE -> renderFire(config, sensorX)
             EffectType.GRAVITY -> renderGravity(config, dt, sensorX, sensorY)
             EffectType.PLASMA -> renderPlasma(config, time, sensorX, sensorY)
             EffectType.STARFIELD -> renderStarfield(config, dt, sensorX, sensorY)
@@ -64,10 +66,12 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
     ): IntArray {
         val frame = IntArray(PIXEL_COUNT)
         val solid = solid(config.solid)
-        val auto = time * (0.25 + config.speed * 2.35)
-        val angleX = auto * 0.71 + tiltY * 1.2
-        val angleY = auto + tiltX * 1.2
-        val angleZ = auto * 0.31 + (tiltX - tiltY) * 0.28
+        val auto = time * config.speed * 2.6
+        // Keep the two physical tilt axes independent. Positive matrix Y means
+        // the bottom edge is lower, which needs a negative X-axis rotation.
+        val angleX = -0.45 + auto * 0.71 - tiltY * 1.2
+        val angleY = 0.55 + auto + tiltX * 1.2
+        val angleZ = auto * 0.31
 
         val points = solid.vertices.map { vertex ->
             val rotated = rotate(vertex, angleX, angleY, angleZ)
@@ -94,7 +98,7 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
         return frame
     }
 
-    private fun renderFire(config: MatrixConfig, tiltX: Float, tiltY: Float): IntArray {
+    private fun renderFire(config: MatrixConfig, tiltX: Float): IntArray {
         val fuel = (0.48f + config.intensity * 0.5f).coerceAtMost(0.98f)
         for (x in 1 until SIZE - 1) {
             val edgeFade = 1f - abs(x - CENTER.toFloat()) / 7f
@@ -106,17 +110,19 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
         }
 
         val next = fireHeat.copyOf()
-        val wind = (tiltX * 2.2f).coerceIn(-2f, 2f)
+        // A small per-row drift bends the flame without pushing the whole body
+        // against the circular edge. Vertical lift never depends on phone tilt.
+        val wind = (tiltX * 0.68f).coerceIn(-0.68f, 0.68f)
         for (y in 0 until SIZE - 1) {
             for (x in 0 until SIZE) {
-                val sourceX = (x - wind + (random.nextFloat() - 0.5f) * 1.5f)
+                val sourceX = (x - wind + (random.nextFloat() - 0.5f) * 0.8f)
                     .roundToInt().coerceIn(0, SIZE - 1)
                 val below = fireHeat[index(sourceX, y + 1)]
                 val left = fireHeat[index((sourceX - 1).coerceAtLeast(0), y + 1)]
                 val right = fireHeat[index((sourceX + 1).coerceAtMost(SIZE - 1), y + 1)]
                 val twoBelow = fireHeat[index(sourceX, (y + 2).coerceAtMost(SIZE - 1))]
                 val cooling = 8f + (1f - config.intensity) * 22f + random.nextFloat() * 16f
-                val lift = 0.55f + config.speed * 0.35f + tiltY * 0.08f
+                val lift = 0.55f + config.speed * 0.35f
                 next[index(x, y)] =
                     ((below * lift + left * 0.14f + right * 0.14f + twoBelow * 0.12f) - cooling)
                         .coerceIn(0f, 255f)
@@ -156,7 +162,9 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
         gravityTrail.indices.forEach { gravityTrail[it] *= fade }
 
         val gx = if (config.accelerometer) tiltX * 14f else sin(lastNanos / 2.8e9).toFloat() * 1.8f
-        val gy = if (config.accelerometer) -tiltY * 14f else 7.5f
+        // Matrix rows grow downwards; Android's positive Y points toward the
+        // physical top of a portrait phone and must therefore accelerate down.
+        val gy = if (config.accelerometer) tiltY * 14f else 7.5f
         val bounce = 0.66f + config.intensity * 0.22f
         val drag = 0.986f - config.speed * 0.018f
 
