@@ -3,7 +3,9 @@ package com.abdulkus.glyphlab.engine
 import com.abdulkus.glyphlab.data.EffectType
 import com.abdulkus.glyphlab.data.MatrixConfig
 import com.abdulkus.glyphlab.data.SolidType
+import com.abdulkus.glyphlab.glyph.HardwareFrameMapper
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -91,5 +93,34 @@ class MatrixEngineTest {
         val first = engine.render(config, 1_000_000_000L)
         val muchLater = engine.render(config, 20_000_000_000L)
         assertTrue(first.contentEquals(muchLater))
+    }
+
+    @Test
+    fun tiltChangesWireframeViewWithCameraParallax() {
+        val config = MatrixConfig(
+            effect = EffectType.WIREFRAME,
+            solid = SolidType.CUBE,
+            speed = 0f,
+            accelerometer = true,
+            sensorStrength = 1f,
+            brightness = 1f
+        )
+        val leftView = MatrixEngine(11).render(config, 1_000_000_000L, tiltX = -0.75f)
+        val rightView = MatrixEngine(11).render(config, 1_000_000_000L, tiltX = 0.75f)
+
+        assertFalse(leftView.contentEquals(rightView))
+        assertTrue(leftView.count { it > 0 } >= 10)
+        assertTrue(rightView.count { it > 0 } >= 10)
+    }
+
+    @Test
+    fun glyphMapperBrightensMidtonesWithoutExceedingSdkRange() {
+        val mapped = HardwareFrameMapper.forGlyph(intArrayOf(0, 32, 128, 255))
+
+        assertEquals(0, mapped[0])
+        assertTrue(mapped[1] > 32)
+        assertTrue(mapped[2] > 128)
+        assertEquals(255, mapped[3])
+        assertTrue(mapped.indices.drop(1).all { index -> mapped[index - 1] <= mapped[index] })
     }
 }

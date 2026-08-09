@@ -66,27 +66,41 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
     ): IntArray {
         val frame = IntArray(PIXEL_COUNT)
         val solid = solid(config.solid)
-        val auto = time * config.speed * 2.6
-        // Keep the two physical tilt axes independent. Positive matrix Y means
-        // the bottom edge is lower, which needs a negative X-axis rotation.
-        val angleX = -0.45 + auto * 0.71 - tiltY * 1.2
-        val angleY = 0.55 + auto + tiltX * 1.2
-        val angleZ = auto * 0.31
+        val orbit = time * config.speed * 1.8
+
+        // The object stays fixed behind the glass. Tilt and automatic motion orbit
+        // the camera around it, producing view-dependent perspective/parallax
+        // instead of rotations in the object's local coordinate system.
+        val cameraYaw = 0.55 + orbit + tiltX * 0.82
+        val cameraPitch = (-0.32 + sin(orbit * 0.63) * 0.16 - tiltY * 0.68)
+            .coerceIn(-1.05, 1.05)
+        val cameraDistance = 5.1
+        val camera = V3(
+            x = sin(cameraYaw) * cos(cameraPitch) * cameraDistance,
+            y = sin(cameraPitch) * cameraDistance,
+            z = cos(cameraYaw) * cos(cameraPitch) * cameraDistance
+        )
+        val forward = (V3.ZERO - camera).normalized()
+        val right = forward.cross(V3.DOWN).normalized()
+        val down = right.cross(forward).normalized()
 
         val points = solid.vertices.map { vertex ->
-            val rotated = rotate(vertex, angleX, angleY, angleZ)
-            val perspective = 4.0 / (4.2 - rotated.z)
+            val fromCamera = vertex - camera
+            val viewX = fromCamera.dot(right)
+            val viewY = fromCamera.dot(down)
+            val viewDepth = fromCamera.dot(forward).coerceAtLeast(2.4)
+            val perspective = 4.25 / viewDepth
             Point2(
-                x = CENTER + rotated.x * perspective * 3.45,
-                y = CENTER + rotated.y * perspective * 3.45,
-                depth = rotated.z
+                x = CENTER + viewX * perspective * 3.15,
+                y = CENTER + viewY * perspective * 3.15,
+                depth = viewDepth
             )
         }
 
-        solid.edges.sortedBy { (a, b) -> (points[a].depth + points[b].depth) / 2.0 }
+        solid.edges.sortedByDescending { (a, b) -> (points[a].depth + points[b].depth) / 2.0 }
             .forEach { (a, b) ->
                 val depth = (points[a].depth + points[b].depth) / 2.0
-                val level = (150 + (depth + 1.4) * 34).roundToInt().coerceIn(100, 245)
+                val level = (276 - depth * 12).roundToInt().coerceIn(205, 255)
                 drawLine(frame, points[a], points[b], level)
             }
 
@@ -309,20 +323,6 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
         )
     }
 
-    private fun rotate(v: V3, ax: Double, ay: Double, az: Double): V3 {
-        val x1 = v.x
-        val y1 = v.y * cos(ax) - v.z * sin(ax)
-        val z1 = v.y * sin(ax) + v.z * cos(ax)
-        val x2 = x1 * cos(ay) + z1 * sin(ay)
-        val y2 = y1
-        val z2 = -x1 * sin(ay) + z1 * cos(ay)
-        return V3(
-            x2 * cos(az) - y2 * sin(az),
-            x2 * sin(az) + y2 * cos(az),
-            z2
-        )
-    }
-
     private fun drawLine(frame: IntArray, from: Point2, to: Point2, level: Int) {
         var x0 = from.x.roundToInt()
         var y0 = from.y.roundToInt()
@@ -360,7 +360,27 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
         z = 0.25f + random.nextFloat() * 0.75f
     )
 
-    private data class V3(val x: Double, val y: Double, val z: Double)
+    private data class V3(val x: Double, val y: Double, val z: Double) {
+        operator fun minus(other: V3) = V3(x - other.x, y - other.y, z - other.z)
+
+        fun dot(other: V3): Double = x * other.x + y * other.y + z * other.z
+
+        fun cross(other: V3) = V3(
+            y * other.z - z * other.y,
+            z * other.x - x * other.z,
+            x * other.y - y * other.x
+        )
+
+        fun normalized(): V3 {
+            val length = sqrt(x * x + y * y + z * z).coerceAtLeast(0.0001)
+            return V3(x / length, y / length, z / length)
+        }
+
+        companion object {
+            val ZERO = V3(0.0, 0.0, 0.0)
+            val DOWN = V3(0.0, 1.0, 0.0)
+        }
+    }
     private data class Point2(val x: Double, val y: Double, val depth: Double)
     private data class Solid(val vertices: List<V3>, val edges: List<Pair<Int, Int>>)
     private data class Particle(var x: Float, var y: Float, var vx: Float, var vy: Float)

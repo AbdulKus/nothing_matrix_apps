@@ -357,7 +357,7 @@ private fun SettingsPanel(config: MatrixConfig, onChange: (MatrixConfig) -> Unit
         ConfigSlider("СКОРОСТЬ", config.speed, { "${(it * 100).roundToInt()}%" }) {
             onChange(config.copy(speed = it))
         }
-        ConfigSlider("ЯРКОСТЬ", config.brightness, { "${(it * 100).roundToInt()}%" }) {
+        ConfigSlider("ЯРКОСТЬ МАТРИЦЫ", config.brightness, { "${(it * 100).roundToInt()}%" }) {
             onChange(config.copy(brightness = it))
         }
         ToggleRow("Акселерометр", config.accelerometer) {

@@ -78,8 +78,9 @@ class GlyphRuntime(context: Context) : SensorEventListener {
                     val next = engine.render(current, System.nanoTime(), tiltX, tiltY)
                     _frame.value = next
                     if (outputEnabled && _connection.value == GlyphConnection.CONNECTED) {
+                        val hardwareFrame = HardwareFrameMapper.forGlyph(next)
                         withContext(Dispatchers.Main.immediate) {
-                            runCatching { manager?.setAppMatrixFrame(next) }
+                            runCatching { manager?.setAppMatrixFrame(hardwareFrame) }
                                 .onFailure { _connection.value = GlyphConnection.UNAVAILABLE }
                         }
                     }
