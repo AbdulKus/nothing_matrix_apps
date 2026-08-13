@@ -15,6 +15,11 @@ enum class SolidType(val title: String) {
     PYRAMID("Пирамида")
 }
 
+enum class AutoBrightnessSource(val title: String) {
+    AMBIENT_LIGHT("Датчик света"),
+    SCREEN_BRIGHTNESS("Яркость экрана")
+}
+
 data class MatrixConfig(
     val effect: EffectType = EffectType.WIREFRAME,
     val solid: SolidType = SolidType.CUBE,
@@ -26,6 +31,7 @@ data class MatrixConfig(
     val sensorStrength: Float = 0.75f,
     val brightness: Float = 0.9f,
     val autoBrightness: Boolean = false,
+    val autoBrightnessSource: AutoBrightnessSource = AutoBrightnessSource.AMBIENT_LIGHT,
     val intensity: Float = 0.7f,
     val trail: Float = 0.35f,
     val particleCount: Int = 28,

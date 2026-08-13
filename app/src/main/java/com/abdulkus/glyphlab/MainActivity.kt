@@ -62,6 +62,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.abdulkus.glyphlab.data.ConfigStore
+import com.abdulkus.glyphlab.data.AutoBrightnessSource
 import com.abdulkus.glyphlab.data.EffectType
 import com.abdulkus.glyphlab.data.MatrixConfig
 import com.abdulkus.glyphlab.data.SolidType
@@ -376,6 +377,14 @@ private fun SettingsPanel(config: MatrixConfig, onChange: (MatrixConfig) -> Unit
         }
         ToggleRow("Автояркость", config.autoBrightness) {
             onChange(config.copy(autoBrightness = it))
+        }
+        if (config.autoBrightness) {
+            Label("ИСТОЧНИК АВТОЯРКОСТИ")
+            ChoiceRow(
+                items = AutoBrightnessSource.entries,
+                selected = config.autoBrightnessSource,
+                title = { it.title }
+            ) { onChange(config.copy(autoBrightnessSource = it)) }
         }
         ConfigSlider(
             if (config.autoBrightness) "МАКСИМАЛЬНАЯ ЯРКОСТЬ" else "ЯРКОСТЬ МАТРИЦЫ",

@@ -3,24 +3,33 @@ package com.abdulkus.glyphlab.glyph
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.ln
+import kotlin.math.max
 
-/**
- * Converts ambient illuminance to a stable physical-output multiplier.
- *
- * Brightness perception is logarithmic, so fixed lux thresholds produce harsh
- * jumps. The curve is interpolated in log-lux space and then time-smoothed:
- * brightening is quick for visibility, while dimming is slower to avoid flicker.
- */
-class AmbientBrightnessController(initialLux: Float? = null) {
+/** Smooths automatic brightness from either ambient lux or screen brightness. */
+class AutomaticBrightnessController(initialScale: Float = 1f) {
     @Volatile
-    var scale: Float = initialLux?.let(::targetScaleForLux) ?: 1f
+    var scale: Float = initialScale.coerceIn(MIN_SCALE, 1f)
         private set
 
     private var lastTimestampNanos = 0L
 
-    fun updateLux(lux: Float, timestampNanos: Long): Float {
+    fun updateAmbientLux(lux: Float, timestampNanos: Long): Float {
         if (!lux.isFinite() || lux < 0f) return scale
-        val target = targetScaleForLux(lux)
+        return updateTarget(targetScaleForLux(lux), timestampNanos, snapInsideDeadband = false)
+    }
+
+    fun updateScreenBrightness(brightness: Int, timestampNanos: Long): Float =
+        updateTarget(
+            targetScaleForScreenBrightness(brightness),
+            timestampNanos,
+            snapInsideDeadband = true
+        )
+
+    private fun updateTarget(
+        target: Float,
+        timestampNanos: Long,
+        snapInsideDeadband: Boolean
+    ): Float {
         if (lastTimestampNanos == 0L || timestampNanos <= lastTimestampNanos) {
             scale = target
             lastTimestampNanos = timestampNanos
@@ -30,7 +39,10 @@ class AmbientBrightnessController(initialLux: Float? = null) {
         val elapsedSeconds = ((timestampNanos - lastTimestampNanos) / 1_000_000_000.0)
             .coerceIn(0.0, 5.0)
         lastTimestampNanos = timestampNanos
-        if (abs(target - scale) < DEADBAND) return scale
+        if (abs(target - scale) < DEADBAND) {
+            if (snapInsideDeadband) scale = target
+            return scale
+        }
 
         val timeConstant = if (target > scale) BRIGHTEN_TIME_SECONDS else DIM_TIME_SECONDS
         val alpha = (1.0 - exp(-elapsedSeconds / timeConstant)).toFloat()
@@ -39,6 +51,7 @@ class AmbientBrightnessController(initialLux: Float? = null) {
     }
 
     companion object {
+        private const val MIN_SCALE = 0.07f
         private const val DEADBAND = 0.025f
         private const val BRIGHTEN_TIME_SECONDS = 0.8
         private const val DIM_TIME_SECONDS = 2.5
@@ -58,6 +71,11 @@ class AmbientBrightnessController(initialLux: Float? = null) {
             val logUpper = ln(LUX_POINTS[upper] + 1f)
             val position = ((logValue - logLower) / (logUpper - logLower)).coerceIn(0f, 1f)
             return SCALE_POINTS[lower] + (SCALE_POINTS[upper] - SCALE_POINTS[lower]) * position
+        }
+
+        fun targetScaleForScreenBrightness(brightness: Int): Float {
+            val normalized = brightness.coerceIn(0, 255) / 255f
+            return max(MIN_SCALE, normalized)
         }
     }
 }

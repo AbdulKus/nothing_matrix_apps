@@ -16,6 +16,7 @@ import android.os.Looper
 import android.os.Message
 import android.os.Messenger
 import android.os.PowerManager
+import com.abdulkus.glyphlab.data.AutoBrightnessSource
 import com.abdulkus.glyphlab.data.ConfigStore
 import com.abdulkus.glyphlab.data.MatrixConfig
 import com.abdulkus.glyphlab.engine.MatrixEngine
@@ -41,9 +42,10 @@ class MatrixToyService : Service(), SensorEventListener {
     private lateinit var configStore: ConfigStore
     private lateinit var sensorManager: SensorManager
     private lateinit var powerManager: PowerManager
+    private lateinit var screenBrightness: ScreenBrightnessMonitor
     private var motionSensor: Sensor? = null
     private var lightSensor: Sensor? = null
-    private var ambientBrightness = AmbientBrightnessController()
+    private var ambientBrightness = AutomaticBrightnessController()
     private var lightSensorRegistered = false
     private var screenReceiverRegistered = false
     private var config = MatrixConfig()
@@ -117,6 +119,7 @@ class MatrixToyService : Service(), SensorEventListener {
         configStore = ConfigStore(this)
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        screenBrightness = ScreenBrightnessMonitor(this)
         motionSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
             ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
@@ -125,7 +128,9 @@ class MatrixToyService : Service(), SensorEventListener {
     override fun onBind(intent: Intent?): IBinder {
         config = configStore.load()
         val cachedLux = configStore.loadRecentAmbientLux()
-        ambientBrightness = AmbientBrightnessController(cachedLux)
+        ambientBrightness = AutomaticBrightnessController(
+            cachedLux?.let { AutomaticBrightnessController.targetScaleForLux(it) } ?: 1f
+        )
         lastReliableLux = cachedLux
         motionOrientationKnown = false
         screenFacesDown = false
@@ -134,6 +139,7 @@ class MatrixToyService : Service(), SensorEventListener {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
         }
         if (powerManager.isInteractive) registerLightSensor()
+        screenBrightness.start()
         if (!screenReceiverRegistered) {
             registerReceiver(
                 screenReceiver,
@@ -157,6 +163,7 @@ class MatrixToyService : Service(), SensorEventListener {
         rememberAmbientLux()
         sensorManager.unregisterListener(this)
         lightSensorRegistered = false
+        screenBrightness.stop()
         unregisterScreenReceiver()
         runCatching { manager?.turnOff() }
         runCatching { manager?.unInit() }
@@ -165,6 +172,7 @@ class MatrixToyService : Service(), SensorEventListener {
     }
 
     override fun onDestroy() {
+        screenBrightness.stop()
         unregisterScreenReceiver()
         super.onDestroy()
     }
@@ -185,7 +193,7 @@ class MatrixToyService : Service(), SensorEventListener {
                 val hardwareFrame = HardwareFrameMapper.forGlyphToy(
                     frame,
                     current.brightness,
-                    ambientScale(current)
+                    automaticScale(current)
                 )
                 withContext(Dispatchers.Main.immediate) {
                     runCatching { manager?.setMatrixFrame(hardwareFrame) }
@@ -200,13 +208,18 @@ class MatrixToyService : Service(), SensorEventListener {
         val frame = frameForCurrentState(config)
         runCatching {
             manager?.setMatrixFrame(
-                HardwareFrameMapper.forGlyphToy(frame, config.brightness, ambientScale(config))
+                HardwareFrameMapper.forGlyphToy(frame, config.brightness, automaticScale(config))
             )
         }
     }
 
-    private fun ambientScale(current: MatrixConfig): Float =
-        if (current.autoBrightness) ambientBrightness.scale else 1f
+    private fun automaticScale(current: MatrixConfig): Float {
+        if (!current.autoBrightness) return 1f
+        return when (current.autoBrightnessSource) {
+            AutoBrightnessSource.AMBIENT_LIGHT -> ambientBrightness.scale
+            AutoBrightnessSource.SCREEN_BRIGHTNESS -> screenBrightness.scale
+        }
+    }
 
     private fun frameForCurrentState(current: MatrixConfig): IntArray =
         if (current.sleepClockEnabled && !powerManager.isInteractive) {
@@ -252,7 +265,7 @@ class MatrixToyService : Service(), SensorEventListener {
             if (sensorIsUsable) {
                 val lux = event.values[0].coerceAtLeast(0f)
                 lastReliableLux = lux
-                ambientBrightness.updateLux(lux, event.timestamp)
+                ambientBrightness.updateAmbientLux(lux, event.timestamp)
             }
             return
         }
