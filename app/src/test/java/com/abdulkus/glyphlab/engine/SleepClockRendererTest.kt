@@ -3,6 +3,8 @@ package com.abdulkus.glyphlab.engine
 import java.time.LocalDateTime
 import java.time.ZoneId
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -49,5 +51,17 @@ class SleepClockRendererTest {
         assertEquals("...###.###...", row(9))
         assertEquals(".....#...#...", row(10))
         assertEquals("...###...#...", row(11))
+    }
+
+    @Test
+    fun clockEffectReusesPixelsWithinAMinuteAndRefreshesOnTheNextMinute() {
+        val cache = MinuteClockFrameCache()
+        val first = cache.frame(testTimeMillis, masterBrightness = 0.8f)
+        val sameMinute = cache.frame(testTimeMillis + 20_000L, masterBrightness = 0.8f)
+        val nextMinute = cache.frame(testTimeMillis + 60_000L, masterBrightness = 0.8f)
+
+        assertSame(first, sameMinute)
+        assertNotSame(first, nextMinute)
+        assertTrue(first.all { it == 0 || it == 204 })
     }
 }

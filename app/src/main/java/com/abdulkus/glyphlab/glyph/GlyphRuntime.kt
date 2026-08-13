@@ -8,8 +8,10 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import com.abdulkus.glyphlab.data.AutoBrightnessSource
 import com.abdulkus.glyphlab.data.ConfigStore
+import com.abdulkus.glyphlab.data.EffectType
 import com.abdulkus.glyphlab.data.MatrixConfig
 import com.abdulkus.glyphlab.engine.MatrixEngine
+import com.abdulkus.glyphlab.engine.MinuteClockFrameCache
 import com.nothing.ketchum.Glyph
 import com.nothing.ketchum.GlyphMatrixManager
 import kotlinx.coroutines.CoroutineScope
@@ -24,6 +26,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 
 enum class GlyphConnection { CONNECTING, CONNECTED, UNAVAILABLE }
 
@@ -40,6 +43,7 @@ class GlyphRuntime(context: Context) : SensorEventListener {
     )
     private val screenBrightness = ScreenBrightnessMonitor(appContext)
     private val engine = MatrixEngine()
+    private val clockFrames = MinuteClockFrameCache()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val _frame = MutableStateFlow(IntArray(MatrixEngine.PIXEL_COUNT))
     private val _connection = MutableStateFlow(GlyphConnection.CONNECTING)
@@ -56,6 +60,8 @@ class GlyphRuntime(context: Context) : SensorEventListener {
     @Volatile private var lastReliableLux: Float? = cachedAmbientLux
     private var manager: GlyphMatrixManager? = null
     private var loop: Job? = null
+    private var lastClockHardwareFrame: IntArray? = null
+    private var lastObservedAutomaticScale = Float.NaN
 
     private val callback = object : GlyphMatrixManager.Callback {
         override fun onServiceConnected(componentName: ComponentName?) {
@@ -92,22 +98,40 @@ class GlyphRuntime(context: Context) : SensorEventListener {
             loop = scope.launch {
                 while (isActive) {
                     val current = config
-                    val next = engine.render(current, System.nanoTime(), tiltX, tiltY)
+                    val clockVisible = current.effect == EffectType.CLOCK
+                    if (!clockVisible) lastClockHardwareFrame = null
+                    val next = if (clockVisible) {
+                        clockFrames.frame(masterBrightness = current.brightness)
+                    } else {
+                        engine.render(current, System.nanoTime(), tiltX, tiltY)
+                    }
                     _frame.value = next
+                    val automatic = automaticScale(current)
                     if (outputEnabled && _connection.value == GlyphConnection.CONNECTED) {
-                        val automatic = automaticScale(current)
                         val hardwareFrame = HardwareFrameMapper.forGlyph(
                             next,
                             current.brightness,
                             automatic,
                             current.minimumBrightness
                         )
-                        withContext(Dispatchers.Main.immediate) {
-                            runCatching { manager?.setAppMatrixFrame(hardwareFrame) }
-                                .onFailure { _connection.value = GlyphConnection.UNAVAILABLE }
+                        if (!clockVisible || lastClockHardwareFrame?.contentEquals(hardwareFrame) != true) {
+                            withContext(Dispatchers.Main.immediate) {
+                                runCatching { manager?.setAppMatrixFrame(hardwareFrame) }
+                                    .onFailure { _connection.value = GlyphConnection.UNAVAILABLE }
+                            }
+                            lastClockHardwareFrame = hardwareFrame
                         }
                     }
-                    delay((1000L / current.frameRate.coerceIn(8, 30)))
+                    val brightnessIsMoving = lastObservedAutomaticScale.isFinite() &&
+                        abs(automatic - lastObservedAutomaticScale) > CLOCK_SCALE_EPSILON
+                    lastObservedAutomaticScale = automatic
+                    delay(
+                        if (clockVisible) {
+                            if (brightnessIsMoving) CLOCK_BRIGHTNESS_STEP_MS else CLOCK_IDLE_POLL_MS
+                        } else {
+                            1000L / current.frameRate.coerceIn(8, 30)
+                        }
+                    )
                 }
             }
         }
@@ -119,6 +143,7 @@ class GlyphRuntime(context: Context) : SensorEventListener {
 
     fun setOutputEnabled(enabled: Boolean) {
         outputEnabled = enabled
+        lastClockHardwareFrame = null
         if (!enabled) runCatching { manager?.closeAppMatrix() }
     }
 
@@ -164,5 +189,11 @@ class GlyphRuntime(context: Context) : SensorEventListener {
             AutoBrightnessSource.AMBIENT_LIGHT -> ambientBrightness.scale
             AutoBrightnessSource.SCREEN_BRIGHTNESS -> screenBrightness.scale
         }
+    }
+
+    private companion object {
+        const val CLOCK_BRIGHTNESS_STEP_MS = 250L
+        const val CLOCK_IDLE_POLL_MS = 1_000L
+        const val CLOCK_SCALE_EPSILON = 0.001f
     }
 }
