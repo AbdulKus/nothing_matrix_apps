@@ -18,6 +18,10 @@ class ConfigStore(context: Context) {
         sensorStrength = prefs.getFloat(KEY_SENSOR_STRENGTH, 0.75f),
         brightness = prefs.getFloat(KEY_BRIGHTNESS, 0.9f),
         autoBrightness = prefs.getBoolean(KEY_AUTO_BRIGHTNESS, false),
+        autoBrightnessSource = prefs.enum(
+            KEY_AUTO_BRIGHTNESS_SOURCE,
+            AutoBrightnessSource.AMBIENT_LIGHT
+        ),
         intensity = prefs.getFloat(KEY_INTENSITY, 0.7f),
         trail = prefs.getFloat(KEY_TRAIL, 0.35f),
         particleCount = prefs.getInt(KEY_PARTICLES, 28),
@@ -43,6 +47,7 @@ class ConfigStore(context: Context) {
             .putFloat(KEY_SENSOR_STRENGTH, config.sensorStrength)
             .putFloat(KEY_BRIGHTNESS, config.brightness)
             .putBoolean(KEY_AUTO_BRIGHTNESS, config.autoBrightness)
+            .putString(KEY_AUTO_BRIGHTNESS_SOURCE, config.autoBrightnessSource.name)
             .putFloat(KEY_INTENSITY, config.intensity)
             .putFloat(KEY_TRAIL, config.trail)
             .putInt(KEY_PARTICLES, config.particleCount)
@@ -85,6 +90,7 @@ class ConfigStore(context: Context) {
         const val KEY_SENSOR_STRENGTH = "sensor_strength"
         const val KEY_BRIGHTNESS = "brightness"
         const val KEY_AUTO_BRIGHTNESS = "auto_brightness"
+        const val KEY_AUTO_BRIGHTNESS_SOURCE = "auto_brightness_source"
         const val KEY_AMBIENT_LUX = "ambient_lux"
         const val KEY_AMBIENT_LUX_TIME = "ambient_lux_time"
         const val KEY_INTENSITY = "intensity"

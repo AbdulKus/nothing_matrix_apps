@@ -6,6 +6,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import com.abdulkus.glyphlab.data.AutoBrightnessSource
 import com.abdulkus.glyphlab.data.ConfigStore
 import com.abdulkus.glyphlab.data.MatrixConfig
 import com.abdulkus.glyphlab.engine.MatrixEngine
@@ -33,7 +34,11 @@ class GlyphRuntime(context: Context) : SensorEventListener {
         ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     private val lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
     private val configStore = ConfigStore(appContext)
-    private var ambientBrightness = AmbientBrightnessController(configStore.loadRecentAmbientLux())
+    private val cachedAmbientLux = configStore.loadRecentAmbientLux()
+    private var ambientBrightness = AutomaticBrightnessController(
+        cachedAmbientLux?.let { AutomaticBrightnessController.targetScaleForLux(it) } ?: 1f
+    )
+    private val screenBrightness = ScreenBrightnessMonitor(appContext)
     private val engine = MatrixEngine()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val _frame = MutableStateFlow(IntArray(MatrixEngine.PIXEL_COUNT))
@@ -48,7 +53,7 @@ class GlyphRuntime(context: Context) : SensorEventListener {
     @Volatile private var tiltY = 0f
     @Volatile private var motionOrientationKnown = false
     @Volatile private var screenFacesDown = false
-    @Volatile private var lastReliableLux: Float? = configStore.loadRecentAmbientLux()
+    @Volatile private var lastReliableLux: Float? = cachedAmbientLux
     private var manager: GlyphMatrixManager? = null
     private var loop: Job? = null
 
@@ -73,6 +78,7 @@ class GlyphRuntime(context: Context) : SensorEventListener {
         if (lightSensor != null) {
             sensorManager.registerListener(this, lightSensor, SensorManager.SENSOR_DELAY_NORMAL)
         }
+        screenBrightness.start()
         runCatching {
             manager = GlyphMatrixManager.getInstance(appContext)
             if (manager == null) {
@@ -89,7 +95,7 @@ class GlyphRuntime(context: Context) : SensorEventListener {
                     val next = engine.render(current, System.nanoTime(), tiltX, tiltY)
                     _frame.value = next
                     if (outputEnabled && _connection.value == GlyphConnection.CONNECTED) {
-                        val automatic = if (current.autoBrightness) ambientBrightness.scale else 1f
+                        val automatic = automaticScale(current)
                         val hardwareFrame = HardwareFrameMapper.forGlyph(
                             next,
                             current.brightness,
@@ -119,6 +125,7 @@ class GlyphRuntime(context: Context) : SensorEventListener {
         outputEnabled = false
         lastReliableLux?.let { configStore.saveAmbientLux(it) }
         sensorManager.unregisterListener(this)
+        screenBrightness.stop()
         runCatching { manager?.closeAppMatrix() }
         runCatching { manager?.unInit() }
         manager = null
@@ -132,7 +139,7 @@ class GlyphRuntime(context: Context) : SensorEventListener {
             if (sensorIsUsable) {
                 val lux = event.values[0].coerceAtLeast(0f)
                 lastReliableLux = lux
-                ambientBrightness.updateLux(lux, event.timestamp)
+                ambientBrightness.updateAmbientLux(lux, event.timestamp)
             }
             return
         }
@@ -149,4 +156,12 @@ class GlyphRuntime(context: Context) : SensorEventListener {
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+
+    private fun automaticScale(current: MatrixConfig): Float {
+        if (!current.autoBrightness) return 1f
+        return when (current.autoBrightnessSource) {
+            AutoBrightnessSource.AMBIENT_LIGHT -> ambientBrightness.scale
+            AutoBrightnessSource.SCREEN_BRIGHTNESS -> screenBrightness.scale
+        }
+    }
 }
