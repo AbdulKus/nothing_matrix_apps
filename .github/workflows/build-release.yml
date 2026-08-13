@@ -32,12 +32,55 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Run tests and build installable APK
-        run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
+      - name: Restore release signing key
+        id: signing
+        if: github.event_name != 'pull_request'
+        shell: bash
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          if [[ -z "${RELEASE_KEYSTORE_BASE64}" || \
+                -z "${RELEASE_KEYSTORE_PASSWORD}" || \
+                -z "${RELEASE_KEY_ALIAS}" || \
+                -z "${RELEASE_KEY_PASSWORD}" ]]; then
+            echo "configured=false" >> "${GITHUB_OUTPUT}"
+            echo "Release signing secrets are incomplete; building the debug fallback."
+            exit 0
+          fi
+
+          KEYSTORE_PATH="${RUNNER_TEMP}/glyphlab-release.jks"
+          printf '%s' "${RELEASE_KEYSTORE_BASE64}" | base64 --decode > "${KEYSTORE_PATH}"
+          keytool -list \
+            -keystore "${KEYSTORE_PATH}" \
+            -storepass "${RELEASE_KEYSTORE_PASSWORD}" \
+            -alias "${RELEASE_KEY_ALIAS}" > /dev/null
+
+          echo "configured=true" >> "${GITHUB_OUTPUT}"
+
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest --stacktrace
+
+      - name: Build signed release APK
+        if: steps.signing.outputs.configured == 'true'
+        env:
+          GLYPH_RELEASE_STORE_FILE: ${{ runner.temp }}/glyphlab-release.jks
+          GLYPH_RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          GLYPH_RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          GLYPH_RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Build installable debug fallback
+        if: steps.signing.outputs.configured != 'true'
+        run: ./gradlew assembleDebug --stacktrace
 
       - name: Name APK
         id: apk
         shell: bash
+        env:
+          RELEASE_SIGNED: ${{ steps.signing.outputs.configured }}
         run: |
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             RELEASE_LABEL="${GITHUB_REF_NAME}"
@@ -45,8 +88,13 @@ jobs:
             RELEASE_LABEL="nightly"
           fi
           APK_NAME="GlyphLab-${RELEASE_LABEL}.apk"
-          cp app/build/outputs/apk/debug/app-debug.apk "${APK_NAME}"
+          if [[ "${RELEASE_SIGNED}" == "true" ]]; then
+            cp app/build/outputs/apk/release/app-release.apk "${APK_NAME}"
+          else
+            cp app/build/outputs/apk/debug/app-debug.apk "${APK_NAME}"
+          fi
           echo "name=${APK_NAME}" >> "${GITHUB_OUTPUT}"
+          echo "signed=${RELEASE_SIGNED}" >> "${GITHUB_OUTPUT}"
 
       - name: Upload Actions artifact
         uses: actions/upload-artifact@v4
@@ -76,3 +124,4 @@ jobs:
             Устанавливаемый APK для Nothing Phone (4a) Pro.
 
             Nightly обновляется автоматически после каждого успешного изменения в `main`.
+            Постоянная release-подпись применяется, когда настроены все signing secrets.

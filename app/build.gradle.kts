@@ -4,6 +4,17 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+val releaseStoreFile = providers.environmentVariable("GLYPH_RELEASE_STORE_FILE").orNull
+val releaseStorePassword = providers.environmentVariable("GLYPH_RELEASE_STORE_PASSWORD").orNull
+val releaseKeyAlias = providers.environmentVariable("GLYPH_RELEASE_KEY_ALIAS").orNull
+val releaseKeyPassword = providers.environmentVariable("GLYPH_RELEASE_KEY_PASSWORD").orNull
+val releaseSigningConfigured = listOf(
+    releaseStoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword
+).all { !it.isNullOrBlank() }
+
 android {
     namespace = "com.abdulkus.glyphlab"
     compileSdk = 35
@@ -12,9 +23,20 @@ android {
         applicationId = "com.abdulkus.glyphlab"
         minSdk = 34
         targetSdk = 35
-        versionCode = 14
-        versionName = "0.3.6"
+        versionCode = 15
+        versionName = "0.3.7"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        if (releaseSigningConfigured) {
+            create("release") {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword!!
+                keyAlias = releaseKeyAlias!!
+                keyPassword = releaseKeyPassword!!
+            }
+        }
     }
 
     buildTypes {
@@ -23,6 +45,9 @@ android {
             versionNameSuffix = "-debug"
         }
         release {
+            if (releaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
