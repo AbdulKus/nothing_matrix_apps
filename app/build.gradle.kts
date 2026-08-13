@@ -23,8 +23,8 @@ android {
         applicationId = "com.abdulkus.glyphlab"
         minSdk = 34
         targetSdk = 35
-        versionCode = 15
-        versionName = "0.3.7"
+        versionCode = 16
+        versionName = "0.3.8"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -32,6 +32,7 @@ android {
         if (releaseSigningConfigured) {
             create("release") {
                 storeFile = file(releaseStoreFile!!)
+                storeType = "PKCS12"
                 storePassword = releaseStorePassword!!
                 keyAlias = releaseKeyAlias!!
                 keyPassword = releaseKeyPassword!!

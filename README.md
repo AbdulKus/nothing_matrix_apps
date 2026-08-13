@@ -29,15 +29,7 @@ Phone (4a) Pro не имеет Glyph Touch и, согласно официаль
 
 Документация публичного GDK не указывает числовой диапазон яркости для `setMatrixFrame`, однако Glyph Matrix использует 12‑битные уровни яркости `0…4095`. Поэтому экранное превью остаётся в обычном 8‑битном диапазоне `0…255`, а перед отправкой на физическую матрицу значения переводятся в 12‑битный диапазон с гамма‑компенсацией. Путь Always‑On Glyph Toys в Nothing OS дополнительно приглушает сырые кадры, поэтому приложение компенсирует это только для `setMatrixFrame`; интерактивный `setAppMatrixFrame` и сами эффекты остаются без изменений.
 
-### Если Nothing OS не даёт доступ к матрице
-
-Для тестового API‑ключа `test` официальный набор разработчика предлагает временно включить режим отладки (он автоматически отключается через 48 часов):
-
-```bash
-adb shell settings put global nt_glyph_interface_debug_enable 1
-```
-
-Для публичного распространения без режима отладки нужно получить собственный `NothingKey` в Nothing Developer Programme и заменить значение в `AndroidManifest.xml`.
+Приложение использует актуальную конфигурацию Glyph Matrix Developer Kit: разрешение `com.nothing.ketchum.permission.ENABLE` и регистрацию Glyph Toy‑сервиса. Тестовый `NothingKey` и временный ADB‑режим отладки для публичной сборки Glyph Matrix не используются.
 
 ## Сборка
 
@@ -56,21 +48,21 @@ GitHub Actions выпускает подписанный release‑APK, если
 `keytool` входит в JDK 17. Новый ключ можно создать из PowerShell или обычной командной строки:
 
 ```powershell
-keytool -genkeypair -v -keystore glyphlab-release.jks -storetype JKS -alias glyphlab -keyalg RSA -keysize 4096 -validity 10000
+keytool -genkeypair -v -keystore glyphlab-release.p12 -storetype PKCS12 -alias glyphlab -keyalg RSA -keysize 4096 -validity 10000
 ```
 
 Посмотреть алиасы и SHA‑256 fingerprint сертификата:
 
 ```powershell
-keytool -list -v -keystore glyphlab-release.jks
+keytool -list -v -keystore glyphlab-release.p12 -storetype PKCS12
 ```
 
-Существующий `.jks` или `.keystore` от другого приложения тоже можно использовать: один ключ может подписывать несколько разных package ID. Это удобно, но связывает безопасность приложений — утечка одного общего ключа затронет их все. Для Glyph Lab важнее всего выбрать ключ один раз, сохранить несколько защищённых резервных копий и не менять его в следующих релизах. Если другое приложение использует Google Play App Signing, не путайте локальный upload key с app-signing key: для APK вне Google Play это просто выбранная вами постоянная подпись.
+Существующий PKCS12‑ключ от другого приложения тоже можно использовать: один ключ может подписывать несколько разных package ID. Это удобно, но связывает безопасность приложений — утечка одного общего ключа затронет их все. Для Glyph Lab важнее всего выбрать ключ один раз, сохранить несколько защищённых резервных копий и не менять его в следующих релизах. Если другое приложение использует Google Play App Signing, не путайте локальный upload key с app-signing key: для APK вне Google Play это просто выбранная вами постоянная подпись.
 
 Закодировать keystore для GitHub Actions в PowerShell:
 
 ```powershell
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("$PWD\glyphlab-release.jks")) | Set-Clipboard
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("$PWD\glyphlab-release.p12")) | Set-Clipboard
 ```
 
 В репозитории откройте **Settings → Secrets and variables → Actions → New repository secret** и создайте:
