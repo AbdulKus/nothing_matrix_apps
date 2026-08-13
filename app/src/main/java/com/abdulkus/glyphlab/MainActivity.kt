@@ -385,13 +385,25 @@ private fun SettingsPanel(config: MatrixConfig, onChange: (MatrixConfig) -> Unit
                 selected = config.autoBrightnessSource,
                 title = { it.title }
             ) { onChange(config.copy(autoBrightnessSource = it)) }
+            ConfigSlider(
+                "МИНИМАЛЬНАЯ ЯРКОСТЬ",
+                config.minimumBrightness,
+                { "${(it * 100).roundToInt()}%" }
+            ) {
+                onChange(config.copy(minimumBrightness = it.coerceAtMost(config.brightness)))
+            }
         }
         ConfigSlider(
             if (config.autoBrightness) "МАКСИМАЛЬНАЯ ЯРКОСТЬ" else "ЯРКОСТЬ МАТРИЦЫ",
             config.brightness,
             { "${(it * 100).roundToInt()}%" }
         ) {
-            onChange(config.copy(brightness = it))
+            onChange(
+                config.copy(
+                    brightness = it,
+                    minimumBrightness = config.minimumBrightness.coerceAtMost(it)
+                )
+            )
         }
         ToggleRow("Акселерометр", config.accelerometer) {
             onChange(config.copy(accelerometer = it))

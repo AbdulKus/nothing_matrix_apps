@@ -3,12 +3,11 @@ package com.abdulkus.glyphlab.glyph
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.ln
-import kotlin.math.max
 
 /** Smooths automatic brightness from either ambient lux or screen brightness. */
 class AutomaticBrightnessController(initialScale: Float = 1f) {
     @Volatile
-    var scale: Float = initialScale.coerceIn(MIN_SCALE, 1f)
+    var scale: Float = initialScale.coerceIn(0f, 1f)
         private set
 
     private var lastTimestampNanos = 0L
@@ -51,13 +50,12 @@ class AutomaticBrightnessController(initialScale: Float = 1f) {
     }
 
     companion object {
-        private const val MIN_SCALE = 0.07f
         private const val DEADBAND = 0.025f
         private const val BRIGHTEN_TIME_SECONDS = 0.8
         private const val DIM_TIME_SECONDS = 2.5
 
         private val LUX_POINTS = floatArrayOf(0f, 1f, 5f, 20f, 100f, 500f, 2_000f, 10_000f)
-        private val SCALE_POINTS = floatArrayOf(0.07f, 0.09f, 0.14f, 0.22f, 0.38f, 0.62f, 0.82f, 1f)
+        private val SCALE_POINTS = floatArrayOf(0f, 0.02f, 0.08f, 0.16f, 0.33f, 0.59f, 0.81f, 1f)
 
         fun targetScaleForLux(lux: Float): Float {
             val value = lux.takeIf { it.isFinite() }?.coerceAtLeast(0f) ?: 0f
@@ -74,8 +72,7 @@ class AutomaticBrightnessController(initialScale: Float = 1f) {
         }
 
         fun targetScaleForScreenBrightness(brightness: Int): Float {
-            val normalized = brightness.coerceIn(0, 255) / 255f
-            return max(MIN_SCALE, normalized)
+            return brightness.coerceIn(0, 255) / 255f
         }
     }
 }
