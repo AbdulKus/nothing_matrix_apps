@@ -5,7 +5,8 @@ enum class EffectType(val title: String, val shortTitle: String) {
     FIRE("Живой огонь", "ОГОНЬ"),
     GRAVITY("Гравитация", "ПЕСОК"),
     PLASMA("Плазменные волны", "ПЛАЗМА"),
-    STARFIELD("Гиперпрыжок", "ЗВЁЗДЫ")
+    STARFIELD("Гиперпрыжок", "ЗВЁЗДЫ"),
+    CLOCK("Часы", "ЧАСЫ")
 }
 
 enum class SolidType(val title: String) {

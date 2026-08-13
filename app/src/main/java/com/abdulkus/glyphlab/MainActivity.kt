@@ -369,11 +369,15 @@ private fun SettingsPanel(config: MatrixConfig, onChange: (MatrixConfig) -> Unit
                 { "${(it * 100).roundToInt()}%" }
             ) { onChange(config.copy(trail = it)) }
 
-            EffectType.WIREFRAME -> Unit
+            EffectType.WIREFRAME, EffectType.CLOCK -> Unit
         }
 
-        ConfigSlider("СКОРОСТЬ", config.speed, { "${(it * 100).roundToInt()}%" }) {
-            onChange(config.copy(speed = it))
+        if (config.effect != EffectType.CLOCK) {
+            ConfigSlider("СКОРОСТЬ", config.speed, { "${(it * 100).roundToInt()}%" }) {
+                onChange(config.copy(speed = it))
+            }
+        } else {
+            Label("ВРЕМЯ ОБНОВЛЯЕТСЯ РАЗ В МИНУТУ")
         }
         ToggleRow("Автояркость", config.autoBrightness) {
             onChange(config.copy(autoBrightness = it))
@@ -405,24 +409,26 @@ private fun SettingsPanel(config: MatrixConfig, onChange: (MatrixConfig) -> Unit
                 )
             )
         }
-        ToggleRow("Акселерометр", config.accelerometer) {
-            onChange(config.copy(accelerometer = it))
-        }
-        if (config.accelerometer) {
-            ConfigSlider(
-                "РЕАКЦИЯ НА НАКЛОН",
-                config.sensorStrength,
-                { "${(it * 100).roundToInt()}%" }
-            ) { onChange(config.copy(sensorStrength = it)) }
-        }
+        if (config.effect != EffectType.CLOCK) {
+            ToggleRow("Акселерометр", config.accelerometer) {
+                onChange(config.copy(accelerometer = it))
+            }
+            if (config.accelerometer) {
+                ConfigSlider(
+                    "РЕАКЦИЯ НА НАКЛОН",
+                    config.sensorStrength,
+                    { "${(it * 100).roundToInt()}%" }
+                ) { onChange(config.copy(sensorStrength = it)) }
+            }
 
-        Spacer(Modifier.height(8.dp))
-        Label("ЧАСТОТА КАДРОВ")
-        ChoiceRow(
-            items = listOf(12, 18, 24, 30),
-            selected = config.frameRate,
-            title = { "$it" }
-        ) { onChange(config.copy(frameRate = it)) }
+            Spacer(Modifier.height(8.dp))
+            Label("ЧАСТОТА КАДРОВ")
+            ChoiceRow(
+                items = listOf(12, 18, 24, 30),
+                selected = config.frameRate,
+                title = { "$it" }
+            ) { onChange(config.copy(frameRate = it)) }
+        }
 
         Spacer(Modifier.height(18.dp))
         ClockSettings(config, onChange)

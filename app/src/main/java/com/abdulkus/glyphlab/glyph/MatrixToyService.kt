@@ -18,9 +18,10 @@ import android.os.Messenger
 import android.os.PowerManager
 import com.abdulkus.glyphlab.data.AutoBrightnessSource
 import com.abdulkus.glyphlab.data.ConfigStore
+import com.abdulkus.glyphlab.data.EffectType
 import com.abdulkus.glyphlab.data.MatrixConfig
 import com.abdulkus.glyphlab.engine.MatrixEngine
-import com.abdulkus.glyphlab.engine.SleepClockRenderer
+import com.abdulkus.glyphlab.engine.MinuteClockFrameCache
 import com.nothing.ketchum.Glyph
 import com.nothing.ketchum.GlyphMatrixManager
 import com.nothing.ketchum.GlyphToy
@@ -33,9 +34,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 
 class MatrixToyService : Service(), SensorEventListener {
     private val engine = MatrixEngine()
+    private val clockFrames = MinuteClockFrameCache()
     private var scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var renderJob: Job? = null
     private var manager: GlyphMatrixManager? = null
@@ -54,6 +57,8 @@ class MatrixToyService : Service(), SensorEventListener {
     private var motionOrientationKnown = false
     private var screenFacesDown = false
     private var lastReliableLux: Float? = null
+    private var lastClockHardwareFrame: IntArray? = null
+    private var lastObservedAutomaticScale = Float.NaN
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -189,17 +194,32 @@ class MatrixToyService : Service(), SensorEventListener {
             while (isActive) {
                 config = configStore.load()
                 val current = config
+                val clockVisible = isClockVisible(current)
+                if (!clockVisible) lastClockHardwareFrame = null
                 val frame = frameForCurrentState(current)
+                val automatic = automaticScale(current)
                 val hardwareFrame = HardwareFrameMapper.forGlyphToy(
                     frame,
                     current.brightness,
-                    automaticScale(current),
+                    automatic,
                     current.minimumBrightness
                 )
-                withContext(Dispatchers.Main.immediate) {
-                    runCatching { manager?.setMatrixFrame(hardwareFrame) }
+                if (!clockVisible || lastClockHardwareFrame?.contentEquals(hardwareFrame) != true) {
+                    withContext(Dispatchers.Main.immediate) {
+                        runCatching { manager?.setMatrixFrame(hardwareFrame) }
+                    }
+                    lastClockHardwareFrame = hardwareFrame
                 }
-                delay(1000L / current.frameRate.coerceIn(8, 18))
+                val brightnessIsMoving = lastObservedAutomaticScale.isFinite() &&
+                    abs(automatic - lastObservedAutomaticScale) > CLOCK_SCALE_EPSILON
+                lastObservedAutomaticScale = automatic
+                delay(
+                    if (clockVisible) {
+                        if (brightnessIsMoving) CLOCK_BRIGHTNESS_STEP_MS else CLOCK_IDLE_POLL_MS
+                    } else {
+                        1000L / current.frameRate.coerceIn(8, 18)
+                    }
+                )
             }
         }
     }
@@ -228,11 +248,15 @@ class MatrixToyService : Service(), SensorEventListener {
     }
 
     private fun frameForCurrentState(current: MatrixConfig): IntArray =
-        if (current.sleepClockEnabled && !powerManager.isInteractive) {
-            SleepClockRenderer.render()
+        if (isClockVisible(current)) {
+            clockFrames.frame(masterBrightness = current.brightness)
         } else {
             engine.render(current, System.nanoTime(), tiltX, tiltY)
         }
+
+    private fun isClockVisible(current: MatrixConfig): Boolean =
+        current.effect == EffectType.CLOCK ||
+            (current.sleepClockEnabled && !powerManager.isInteractive)
 
     private fun unregisterScreenReceiver() {
         if (!screenReceiverRegistered) return
@@ -288,4 +312,10 @@ class MatrixToyService : Service(), SensorEventListener {
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+
+    private companion object {
+        const val CLOCK_BRIGHTNESS_STEP_MS = 250L
+        const val CLOCK_IDLE_POLL_MS = 1_000L
+        const val CLOCK_SCALE_EPSILON = 0.001f
+    }
 }

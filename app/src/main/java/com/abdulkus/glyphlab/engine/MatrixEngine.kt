@@ -47,6 +47,7 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
             EffectType.GRAVITY -> renderGravity(config, dt, sensorX, sensorY)
             EffectType.PLASMA -> renderPlasma(config, time, sensorX, sensorY)
             EffectType.STARFIELD -> renderStarfield(config, dt, sensorX, sensorY)
+            EffectType.CLOCK -> SleepClockRenderer.render()
         }
 
         val brightness = config.brightness.coerceIn(0f, 1f)
