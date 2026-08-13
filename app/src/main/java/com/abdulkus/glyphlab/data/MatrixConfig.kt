@@ -25,6 +25,7 @@ data class MatrixConfig(
     val accelerometer: Boolean = true,
     val sensorStrength: Float = 0.75f,
     val brightness: Float = 0.9f,
+    val autoBrightness: Boolean = false,
     val intensity: Float = 0.7f,
     val trail: Float = 0.35f,
     val particleCount: Int = 28,

@@ -42,18 +42,30 @@ class MatrixToyService : Service(), SensorEventListener {
     private lateinit var sensorManager: SensorManager
     private lateinit var powerManager: PowerManager
     private var motionSensor: Sensor? = null
+    private var lightSensor: Sensor? = null
+    private var ambientBrightness = AmbientBrightnessController()
+    private var lightSensorRegistered = false
     private var screenReceiverRegistered = false
     private var config = MatrixConfig()
     private var tiltX = 0f
     private var tiltY = 0f
+    private var motionOrientationKnown = false
+    private var screenFacesDown = false
+    private var lastReliableLux: Float? = null
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
-                Intent.ACTION_SCREEN_OFF,
-                Intent.ACTION_SCREEN_ON -> {
+                Intent.ACTION_SCREEN_OFF -> {
+                    rememberAmbientLux()
+                    unregisterLightSensor()
                     // Swap the frame immediately instead of waiting for the
                     // next animation tick or the next minute-level AOD event.
+                    renderSingleFrame()
+                    ensureRenderLoop()
+                }
+                Intent.ACTION_SCREEN_ON -> {
+                    registerLightSensor()
                     renderSingleFrame()
                     ensureRenderLoop()
                 }
@@ -107,14 +119,21 @@ class MatrixToyService : Service(), SensorEventListener {
         powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         motionSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
             ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
     }
 
     override fun onBind(intent: Intent?): IBinder {
         config = configStore.load()
+        val cachedLux = configStore.loadRecentAmbientLux()
+        ambientBrightness = AmbientBrightnessController(cachedLux)
+        lastReliableLux = cachedLux
+        motionOrientationKnown = false
+        screenFacesDown = false
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         motionSensor?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
         }
+        if (powerManager.isInteractive) registerLightSensor()
         if (!screenReceiverRegistered) {
             registerReceiver(
                 screenReceiver,
@@ -135,7 +154,9 @@ class MatrixToyService : Service(), SensorEventListener {
         renderJob?.cancel()
         renderJob = null
         scope.cancel()
+        rememberAmbientLux()
         sensorManager.unregisterListener(this)
+        lightSensorRegistered = false
         unregisterScreenReceiver()
         runCatching { manager?.turnOff() }
         runCatching { manager?.unInit() }
@@ -161,7 +182,11 @@ class MatrixToyService : Service(), SensorEventListener {
                 config = configStore.load()
                 val current = config
                 val frame = frameForCurrentState(current)
-                val hardwareFrame = HardwareFrameMapper.forGlyphToy(frame, current.brightness)
+                val hardwareFrame = HardwareFrameMapper.forGlyphToy(
+                    frame,
+                    current.brightness,
+                    ambientScale(current)
+                )
                 withContext(Dispatchers.Main.immediate) {
                     runCatching { manager?.setMatrixFrame(hardwareFrame) }
                 }
@@ -174,9 +199,14 @@ class MatrixToyService : Service(), SensorEventListener {
         config = configStore.load()
         val frame = frameForCurrentState(config)
         runCatching {
-            manager?.setMatrixFrame(HardwareFrameMapper.forGlyphToy(frame, config.brightness))
+            manager?.setMatrixFrame(
+                HardwareFrameMapper.forGlyphToy(frame, config.brightness, ambientScale(config))
+            )
         }
     }
+
+    private fun ambientScale(current: MatrixConfig): Float =
+        if (current.autoBrightness) ambientBrightness.scale else 1f
 
     private fun frameForCurrentState(current: MatrixConfig): IntArray =
         if (current.sleepClockEnabled && !powerManager.isInteractive) {
@@ -191,8 +221,44 @@ class MatrixToyService : Service(), SensorEventListener {
         screenReceiverRegistered = false
     }
 
+    private fun rememberAmbientLux() {
+        lastReliableLux?.let { configStore.saveAmbientLux(it) }
+    }
+
+    private fun registerLightSensor() {
+        if (lightSensorRegistered) return
+        lightSensor?.let {
+            lightSensorRegistered = sensorManager.registerListener(
+                this,
+                it,
+                SensorManager.SENSOR_DELAY_NORMAL
+            )
+        }
+    }
+
+    private fun unregisterLightSensor() {
+        if (!lightSensorRegistered) return
+        lightSensor?.let { sensorManager.unregisterListener(this, it) }
+        lightSensorRegistered = false
+    }
+
     override fun onSensorChanged(event: SensorEvent) {
+        if (event.sensor.type == Sensor.TYPE_LIGHT) {
+            // The front light sensor is covered when Flip to Glyph places the
+            // phone screen-down. Keep the last measurement from before the flip
+            // instead of mistaking the table for a dark room.
+            val sensorIsUsable = motionSensor == null ||
+                (motionOrientationKnown && !screenFacesDown)
+            if (sensorIsUsable) {
+                val lux = event.values[0].coerceAtLeast(0f)
+                lastReliableLux = lux
+                ambientBrightness.updateLux(lux, event.timestamp)
+            }
+            return
+        }
         if (event.sensor.type != motionSensor?.type) return
+        motionOrientationKnown = true
+        screenFacesDown = event.values[2] < -SensorManager.GRAVITY_EARTH * 0.25f
         val alpha = 0.13f
         val isGravityVector = event.sensor.type == Sensor.TYPE_GRAVITY
         val direction = if (isGravityVector) -1f else 1f
