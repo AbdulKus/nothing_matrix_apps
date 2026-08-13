@@ -80,8 +80,8 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
             val viewed = cameraView(vertex, cameraX, cameraY, cameraZ)
             val perspective = (4.2 / (4.8 - viewed.z)).coerceIn(0.72, 1.34)
             Point2(
-                x = CENTER + viewed.x * perspective * 2.85,
-                y = CENTER + viewed.y * perspective * 2.85,
+                x = CENTER + viewed.x * perspective * WIREFRAME_PROJECTION_SCALE,
+                y = CENTER + viewed.y * perspective * WIREFRAME_PROJECTION_SCALE,
                 depth = viewed.z
             )
         }
@@ -429,6 +429,7 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
         const val PIXEL_COUNT = SIZE * SIZE
         const val CENTER = 6.0
         const val MATRIX_RADIUS = 6.35f
+        private const val WIREFRAME_PROJECTION_SCALE = 3.45
 
         fun isInsideMatrix(x: Int, y: Int): Boolean {
             val dx = x - CENTER

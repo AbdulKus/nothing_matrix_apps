@@ -239,6 +239,30 @@ class MatrixEngineTest {
     }
 
     @Test
+    fun cubeReachesTheOuterUsablePixelRing() {
+        val frame = MatrixEngine(32).render(
+            MatrixConfig(
+                effect = EffectType.WIREFRAME,
+                solid = SolidType.CUBE,
+                speed = 0f,
+                accelerometer = false,
+                brightness = 1f
+            ),
+            1_000_000_000L
+        )
+
+        val furthestLitRadius = frame.indices
+            .filter { frame[it] > 0 }
+            .maxOf { index ->
+                val dx = index % MatrixEngine.SIZE - MatrixEngine.CENTER
+                val dy = index / MatrixEngine.SIZE - MatrixEngine.CENTER
+                kotlin.math.sqrt(dx * dx + dy * dy)
+            }
+
+        assertTrue(furthestLitRadius >= 6.0)
+    }
+
+    @Test
     fun disabledAutoRotationAxesKeepCameraStillAtNonZeroSpeed() {
         val config = MatrixConfig(
             effect = EffectType.WIREFRAME,
