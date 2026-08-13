@@ -193,7 +193,8 @@ class MatrixToyService : Service(), SensorEventListener {
                 val hardwareFrame = HardwareFrameMapper.forGlyphToy(
                     frame,
                     current.brightness,
-                    automaticScale(current)
+                    automaticScale(current),
+                    current.minimumBrightness
                 )
                 withContext(Dispatchers.Main.immediate) {
                     runCatching { manager?.setMatrixFrame(hardwareFrame) }
@@ -208,7 +209,12 @@ class MatrixToyService : Service(), SensorEventListener {
         val frame = frameForCurrentState(config)
         runCatching {
             manager?.setMatrixFrame(
-                HardwareFrameMapper.forGlyphToy(frame, config.brightness, automaticScale(config))
+                HardwareFrameMapper.forGlyphToy(
+                    frame,
+                    config.brightness,
+                    automaticScale(config),
+                    config.minimumBrightness
+                )
             )
         }
     }

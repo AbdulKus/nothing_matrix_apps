@@ -30,6 +30,7 @@ data class MatrixConfig(
     val accelerometer: Boolean = true,
     val sensorStrength: Float = 0.75f,
     val brightness: Float = 0.9f,
+    val minimumBrightness: Float = 0.07f,
     val autoBrightness: Boolean = false,
     val autoBrightnessSource: AutoBrightnessSource = AutoBrightnessSource.AMBIENT_LIGHT,
     val intensity: Float = 0.7f,

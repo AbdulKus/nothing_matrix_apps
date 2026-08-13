@@ -6,11 +6,11 @@ import org.junit.Test
 
 class AutomaticBrightnessControllerTest {
     @Test
-    fun luxCurveIsMonotonicAndKeepsSafeNightFloor() {
+    fun luxCurveIsMonotonicAndCoversTheWholeConfiguredRange() {
         val lux = listOf(0f, 1f, 5f, 20f, 100f, 500f, 2_000f, 10_000f, 50_000f)
         val scales = lux.map { AutomaticBrightnessController.targetScaleForLux(it) }
 
-        assertEquals(0.07f, scales.first(), 0.0001f)
+        assertEquals(0f, scales.first(), 0.0001f)
         assertEquals(1f, scales.last(), 0.0001f)
         assertTrue(scales.zipWithNext().all { (left, right) -> left <= right })
     }
@@ -26,9 +26,9 @@ class AutomaticBrightnessControllerTest {
     }
 
     @Test
-    fun screenBrightnessIsLinkedLinearlyWithAVisibleFloor() {
-        assertEquals(0.07f, AutomaticBrightnessController.targetScaleForScreenBrightness(0), 0.0001f)
-        assertEquals(0.07f, AutomaticBrightnessController.targetScaleForScreenBrightness(10), 0.0001f)
+    fun screenBrightnessIsLinkedLinearlyAcrossTheConfiguredRange() {
+        assertEquals(0f, AutomaticBrightnessController.targetScaleForScreenBrightness(0), 0.0001f)
+        assertEquals(10f / 255f, AutomaticBrightnessController.targetScaleForScreenBrightness(10), 0.0001f)
         assertEquals(128f / 255f, AutomaticBrightnessController.targetScaleForScreenBrightness(128), 0.0001f)
         assertEquals(1f, AutomaticBrightnessController.targetScaleForScreenBrightness(255), 0.0001f)
     }
@@ -40,7 +40,7 @@ class AutomaticBrightnessControllerTest {
         val start = controller.scale
         val afterOneSecond = controller.updateAmbientLux(10_000f, 2_000_000_000L)
 
-        assertEquals(0.38f, start, 0.0001f)
+        assertEquals(0.33f, start, 0.0001f)
         assertTrue(afterOneSecond > start)
         assertTrue(afterOneSecond < 1f)
     }

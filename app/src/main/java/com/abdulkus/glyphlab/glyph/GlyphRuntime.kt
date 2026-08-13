@@ -99,7 +99,8 @@ class GlyphRuntime(context: Context) : SensorEventListener {
                         val hardwareFrame = HardwareFrameMapper.forGlyph(
                             next,
                             current.brightness,
-                            automatic
+                            automatic,
+                            current.minimumBrightness
                         )
                         withContext(Dispatchers.Main.immediate) {
                             runCatching { manager?.setAppMatrixFrame(hardwareFrame) }

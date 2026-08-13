@@ -13,12 +13,13 @@ object HardwareFrameMapper {
     fun forGlyph(
         frame: IntArray,
         masterBrightness: Float,
-        ambientScale: Float = 1f
+        automaticScale: Float = 1f,
+        minimumBrightness: Float = 0f
     ): IntArray {
         val master = masterBrightness.coerceIn(0f, 1f).toDouble()
         if (master == 0.0) return IntArray(frame.size)
 
-        return map(frame, master, ambientScale, outputGain = 1.0)
+        return map(frame, master, automaticScale, minimumBrightness, outputGain = 1.0)
     }
 
     /**
@@ -31,34 +32,40 @@ object HardwareFrameMapper {
     fun forGlyphToy(
         frame: IntArray,
         masterBrightness: Float,
-        ambientScale: Float = 1f
+        automaticScale: Float = 1f,
+        minimumBrightness: Float = 0f
     ): IntArray {
         val master = masterBrightness.coerceIn(0f, 1f).toDouble()
         if (master == 0.0) return IntArray(frame.size)
-        return map(frame, master, ambientScale, outputGain = TOY_AOD_GAIN)
+        return map(frame, master, automaticScale, minimumBrightness, outputGain = TOY_AOD_GAIN)
     }
 
     private fun map(
         frame: IntArray,
         master: Double,
-        ambientScale: Float,
+        automaticScale: Float,
+        minimumBrightness: Float,
         outputGain: Double
-    ): IntArray =
-        IntArray(frame.size) { index ->
+    ): IntArray {
+        val minimum = minimumBrightness.coerceIn(0f, master.toFloat()).toDouble()
+        val position = automaticScale.coerceIn(0f, 1f).toDouble()
+        val effectiveBrightness = minimum + (master - minimum) * position
+        return IntArray(frame.size) { index ->
             val input = frame[index].coerceIn(0, PREVIEW_MAX.toInt())
             if (input == 0) {
                 0
             } else {
                 // MatrixEngine already applies the user's master brightness for
                 // the on-screen preview. Recover the source luminance, shape the
-                // midtones, then apply master once to the physical 12-bit range.
+                // midtones, then apply the selected point inside the automatic
+                // min/max range once to the physical 12-bit range.
                 // This keeps preview rendering 8-bit while allowing the Glyph
                 // Matrix to actually reach its full output instead of stopping at
                 // 255/4095 (~6.2% of the available LED level).
                 val source = (input / PREVIEW_MAX / master).coerceIn(0.0, 1.0)
-                val automatic = ambientScale.coerceIn(0f, 1f).toDouble()
-                (MATRIX_MAX * source.pow(OUTPUT_GAMMA) * master * automatic * outputGain)
+                (MATRIX_MAX * source.pow(OUTPUT_GAMMA) * effectiveBrightness * outputGain)
                     .roundToInt().coerceAtLeast(1)
             }
         }
+    }
 }

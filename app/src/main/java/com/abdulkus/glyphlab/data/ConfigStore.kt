@@ -17,6 +17,7 @@ class ConfigStore(context: Context) {
         accelerometer = prefs.getBoolean(KEY_ACCELEROMETER, true),
         sensorStrength = prefs.getFloat(KEY_SENSOR_STRENGTH, 0.75f),
         brightness = prefs.getFloat(KEY_BRIGHTNESS, 0.9f),
+        minimumBrightness = prefs.getFloat(KEY_MINIMUM_BRIGHTNESS, 0.07f),
         autoBrightness = prefs.getBoolean(KEY_AUTO_BRIGHTNESS, false),
         autoBrightnessSource = prefs.enum(
             KEY_AUTO_BRIGHTNESS_SOURCE,
@@ -46,6 +47,7 @@ class ConfigStore(context: Context) {
             .putBoolean(KEY_ACCELEROMETER, config.accelerometer)
             .putFloat(KEY_SENSOR_STRENGTH, config.sensorStrength)
             .putFloat(KEY_BRIGHTNESS, config.brightness)
+            .putFloat(KEY_MINIMUM_BRIGHTNESS, config.minimumBrightness)
             .putBoolean(KEY_AUTO_BRIGHTNESS, config.autoBrightness)
             .putString(KEY_AUTO_BRIGHTNESS_SOURCE, config.autoBrightnessSource.name)
             .putFloat(KEY_INTENSITY, config.intensity)
@@ -89,6 +91,7 @@ class ConfigStore(context: Context) {
         const val KEY_ACCELEROMETER = "accelerometer"
         const val KEY_SENSOR_STRENGTH = "sensor_strength"
         const val KEY_BRIGHTNESS = "brightness"
+        const val KEY_MINIMUM_BRIGHTNESS = "minimum_brightness"
         const val KEY_AUTO_BRIGHTNESS = "auto_brightness"
         const val KEY_AUTO_BRIGHTNESS_SOURCE = "auto_brightness_source"
         const val KEY_AMBIENT_LUX = "ambient_lux"

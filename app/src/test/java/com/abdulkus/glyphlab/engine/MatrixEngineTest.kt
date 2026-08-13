@@ -182,16 +182,43 @@ class MatrixEngineTest {
     }
 
     @Test
-    fun ambientScaleChangesOnlyPhysicalOutputBrightness() {
+    fun automaticScaleChangesOnlyPhysicalOutputBrightness() {
         val frame = intArrayOf(0, 32, 128, 255)
         val full = HardwareFrameMapper.forGlyph(frame, 1f)
-        val dimmed = HardwareFrameMapper.forGlyph(frame, 1f, ambientScale = 0.5f)
+        val dimmed = HardwareFrameMapper.forGlyph(frame, 1f, automaticScale = 0.5f)
 
         assertEquals(0, dimmed[0])
         assertTrue(dimmed.indices.drop(1).all { index ->
             kotlin.math.abs(dimmed[index] - full[index] * 0.5f) <= 1f
         })
         assertTrue(frame.contentEquals(intArrayOf(0, 32, 128, 255)))
+    }
+
+    @Test
+    fun automaticBrightnessInterpolatesBetweenConfiguredMinimumAndMaximum() {
+        val frame = intArrayOf(255)
+        val minimum = HardwareFrameMapper.forGlyph(
+            frame,
+            masterBrightness = 1f,
+            automaticScale = 0f,
+            minimumBrightness = 0.2f
+        ).single()
+        val middle = HardwareFrameMapper.forGlyph(
+            frame,
+            masterBrightness = 1f,
+            automaticScale = 0.5f,
+            minimumBrightness = 0.2f
+        ).single()
+        val maximum = HardwareFrameMapper.forGlyph(
+            frame,
+            masterBrightness = 1f,
+            automaticScale = 1f,
+            minimumBrightness = 0.2f
+        ).single()
+
+        assertEquals(819, minimum)
+        assertEquals(2457, middle)
+        assertEquals(4095, maximum)
     }
 
     @Test
