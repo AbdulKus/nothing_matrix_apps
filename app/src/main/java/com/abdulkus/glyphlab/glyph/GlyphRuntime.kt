@@ -6,6 +6,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import com.abdulkus.glyphlab.data.ConfigStore
 import com.abdulkus.glyphlab.data.MatrixConfig
 import com.abdulkus.glyphlab.engine.MatrixEngine
 import com.nothing.ketchum.Glyph
@@ -30,6 +31,9 @@ class GlyphRuntime(context: Context) : SensorEventListener {
     private val sensorManager = appContext.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val motionSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
         ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+    private val lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
+    private val configStore = ConfigStore(appContext)
+    private var ambientBrightness = AmbientBrightnessController(configStore.loadRecentAmbientLux())
     private val engine = MatrixEngine()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val _frame = MutableStateFlow(IntArray(MatrixEngine.PIXEL_COUNT))
@@ -42,6 +46,9 @@ class GlyphRuntime(context: Context) : SensorEventListener {
     @Volatile private var outputEnabled = false
     @Volatile private var tiltX = 0f
     @Volatile private var tiltY = 0f
+    @Volatile private var motionOrientationKnown = false
+    @Volatile private var screenFacesDown = false
+    @Volatile private var lastReliableLux: Float? = configStore.loadRecentAmbientLux()
     private var manager: GlyphMatrixManager? = null
     private var loop: Job? = null
 
@@ -63,6 +70,9 @@ class GlyphRuntime(context: Context) : SensorEventListener {
         if (motionSensor != null) {
             sensorManager.registerListener(this, motionSensor, SensorManager.SENSOR_DELAY_GAME)
         }
+        if (lightSensor != null) {
+            sensorManager.registerListener(this, lightSensor, SensorManager.SENSOR_DELAY_NORMAL)
+        }
         runCatching {
             manager = GlyphMatrixManager.getInstance(appContext)
             if (manager == null) {
@@ -79,7 +89,12 @@ class GlyphRuntime(context: Context) : SensorEventListener {
                     val next = engine.render(current, System.nanoTime(), tiltX, tiltY)
                     _frame.value = next
                     if (outputEnabled && _connection.value == GlyphConnection.CONNECTED) {
-                        val hardwareFrame = HardwareFrameMapper.forGlyph(next, current.brightness)
+                        val automatic = if (current.autoBrightness) ambientBrightness.scale else 1f
+                        val hardwareFrame = HardwareFrameMapper.forGlyph(
+                            next,
+                            current.brightness,
+                            automatic
+                        )
                         withContext(Dispatchers.Main.immediate) {
                             runCatching { manager?.setAppMatrixFrame(hardwareFrame) }
                                 .onFailure { _connection.value = GlyphConnection.UNAVAILABLE }
@@ -102,6 +117,7 @@ class GlyphRuntime(context: Context) : SensorEventListener {
 
     fun stop() {
         outputEnabled = false
+        lastReliableLux?.let { configStore.saveAmbientLux(it) }
         sensorManager.unregisterListener(this)
         runCatching { manager?.closeAppMatrix() }
         runCatching { manager?.unInit() }
@@ -110,7 +126,19 @@ class GlyphRuntime(context: Context) : SensorEventListener {
     }
 
     override fun onSensorChanged(event: SensorEvent) {
+        if (event.sensor.type == Sensor.TYPE_LIGHT) {
+            val sensorIsUsable = motionSensor == null ||
+                (motionOrientationKnown && !screenFacesDown)
+            if (sensorIsUsable) {
+                val lux = event.values[0].coerceAtLeast(0f)
+                lastReliableLux = lux
+                ambientBrightness.updateLux(lux, event.timestamp)
+            }
+            return
+        }
         if (event.sensor.type != motionSensor?.type) return
+        motionOrientationKnown = true
+        screenFacesDown = event.values[2] < -SensorManager.GRAVITY_EARTH * 0.25f
         val alpha = 0.16f
         val isGravityVector = event.sensor.type == Sensor.TYPE_GRAVITY
         val direction = if (isGravityVector) -1f else 1f

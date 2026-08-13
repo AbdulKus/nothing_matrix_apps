@@ -10,11 +10,15 @@ object HardwareFrameMapper {
     private const val OUTPUT_GAMMA = 0.70
     private const val TOY_AOD_GAIN = 4.0
 
-    fun forGlyph(frame: IntArray, masterBrightness: Float): IntArray {
+    fun forGlyph(
+        frame: IntArray,
+        masterBrightness: Float,
+        ambientScale: Float = 1f
+    ): IntArray {
         val master = masterBrightness.coerceIn(0f, 1f).toDouble()
         if (master == 0.0) return IntArray(frame.size)
 
-        return map(frame, master, outputGain = 1.0)
+        return map(frame, master, ambientScale, outputGain = 1.0)
     }
 
     /**
@@ -24,13 +28,22 @@ object HardwareFrameMapper {
      * in Glyph Toys. Compensate only the Toy output and preserve every luminance
      * level produced by MatrixEngine.
      */
-    fun forGlyphToy(frame: IntArray, masterBrightness: Float): IntArray {
+    fun forGlyphToy(
+        frame: IntArray,
+        masterBrightness: Float,
+        ambientScale: Float = 1f
+    ): IntArray {
         val master = masterBrightness.coerceIn(0f, 1f).toDouble()
         if (master == 0.0) return IntArray(frame.size)
-        return map(frame, master, outputGain = TOY_AOD_GAIN)
+        return map(frame, master, ambientScale, outputGain = TOY_AOD_GAIN)
     }
 
-    private fun map(frame: IntArray, master: Double, outputGain: Double): IntArray =
+    private fun map(
+        frame: IntArray,
+        master: Double,
+        ambientScale: Float,
+        outputGain: Double
+    ): IntArray =
         IntArray(frame.size) { index ->
             val input = frame[index].coerceIn(0, PREVIEW_MAX.toInt())
             if (input == 0) {
@@ -43,7 +56,8 @@ object HardwareFrameMapper {
                 // Matrix to actually reach its full output instead of stopping at
                 // 255/4095 (~6.2% of the available LED level).
                 val source = (input / PREVIEW_MAX / master).coerceIn(0.0, 1.0)
-                (MATRIX_MAX * source.pow(OUTPUT_GAMMA) * master * outputGain)
+                val automatic = ambientScale.coerceIn(0f, 1f).toDouble()
+                (MATRIX_MAX * source.pow(OUTPUT_GAMMA) * master * automatic * outputGain)
                     .roundToInt().coerceAtLeast(1)
             }
         }

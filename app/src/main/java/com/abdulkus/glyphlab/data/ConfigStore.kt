@@ -17,6 +17,7 @@ class ConfigStore(context: Context) {
         accelerometer = prefs.getBoolean(KEY_ACCELEROMETER, true),
         sensorStrength = prefs.getFloat(KEY_SENSOR_STRENGTH, 0.75f),
         brightness = prefs.getFloat(KEY_BRIGHTNESS, 0.9f),
+        autoBrightness = prefs.getBoolean(KEY_AUTO_BRIGHTNESS, false),
         intensity = prefs.getFloat(KEY_INTENSITY, 0.7f),
         trail = prefs.getFloat(KEY_TRAIL, 0.35f),
         particleCount = prefs.getInt(KEY_PARTICLES, 28),
@@ -41,12 +42,27 @@ class ConfigStore(context: Context) {
             .putBoolean(KEY_ACCELEROMETER, config.accelerometer)
             .putFloat(KEY_SENSOR_STRENGTH, config.sensorStrength)
             .putFloat(KEY_BRIGHTNESS, config.brightness)
+            .putBoolean(KEY_AUTO_BRIGHTNESS, config.autoBrightness)
             .putFloat(KEY_INTENSITY, config.intensity)
             .putFloat(KEY_TRAIL, config.trail)
             .putInt(KEY_PARTICLES, config.particleCount)
             .putBoolean(KEY_VERTICES, config.showVertices)
             .putInt(KEY_FRAME_RATE, config.frameRate)
             .putBoolean(KEY_SLEEP_CLOCK_ENABLED, config.sleepClockEnabled)
+            .apply()
+    }
+
+    fun loadRecentAmbientLux(nowMillis: Long = System.currentTimeMillis()): Float? {
+        val savedAt = prefs.getLong(KEY_AMBIENT_LUX_TIME, 0L)
+        if (savedAt <= 0L || nowMillis - savedAt !in 0L..AMBIENT_LUX_MAX_AGE_MS) return null
+        return prefs.getFloat(KEY_AMBIENT_LUX, -1f).takeIf { it >= 0f }
+    }
+
+    fun saveAmbientLux(lux: Float, nowMillis: Long = System.currentTimeMillis()) {
+        if (!lux.isFinite() || lux < 0f) return
+        prefs.edit()
+            .putFloat(KEY_AMBIENT_LUX, lux)
+            .putLong(KEY_AMBIENT_LUX_TIME, nowMillis)
             .apply()
     }
 
@@ -68,6 +84,9 @@ class ConfigStore(context: Context) {
         const val KEY_ACCELEROMETER = "accelerometer"
         const val KEY_SENSOR_STRENGTH = "sensor_strength"
         const val KEY_BRIGHTNESS = "brightness"
+        const val KEY_AUTO_BRIGHTNESS = "auto_brightness"
+        const val KEY_AMBIENT_LUX = "ambient_lux"
+        const val KEY_AMBIENT_LUX_TIME = "ambient_lux_time"
         const val KEY_INTENSITY = "intensity"
         const val KEY_TRAIL = "trail"
         const val KEY_PARTICLES = "particles"
@@ -75,5 +94,6 @@ class ConfigStore(context: Context) {
         const val KEY_FRAME_RATE = "frame_rate"
         const val KEY_SLEEP_CLOCK_ENABLED = "sleep_clock_enabled"
         const val KEY_LEGACY_CLOCK_ENABLED = "clock_enabled"
+        const val AMBIENT_LUX_MAX_AGE_MS = 2L * 60L * 60L * 1000L
     }
 }

@@ -182,6 +182,19 @@ class MatrixEngineTest {
     }
 
     @Test
+    fun ambientScaleChangesOnlyPhysicalOutputBrightness() {
+        val frame = intArrayOf(0, 32, 128, 255)
+        val full = HardwareFrameMapper.forGlyph(frame, 1f)
+        val dimmed = HardwareFrameMapper.forGlyph(frame, 1f, ambientScale = 0.5f)
+
+        assertEquals(0, dimmed[0])
+        assertTrue(dimmed.indices.drop(1).all { index ->
+            kotlin.math.abs(dimmed[index] - full[index] * 0.5f) <= 1f
+        })
+        assertTrue(frame.contentEquals(intArrayOf(0, 32, 128, 255)))
+    }
+
+    @Test
     fun cubeKeepsFullExpressiveWireframeAtMatrixResolution() {
         val frame = MatrixEngine(31).render(
             MatrixConfig(
