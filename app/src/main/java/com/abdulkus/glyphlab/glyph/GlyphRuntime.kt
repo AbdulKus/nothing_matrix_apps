@@ -6,6 +6,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.os.SystemClock
 import com.abdulkus.glyphlab.data.AutoBrightnessSource
 import com.abdulkus.glyphlab.data.ConfigStore
 import com.abdulkus.glyphlab.data.EffectType
@@ -19,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,7 +28,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.abs
+import kotlinx.coroutines.withTimeoutOrNull
 
 enum class GlyphConnection { CONNECTING, CONNECTED, UNAVAILABLE }
 
@@ -41,7 +43,10 @@ class GlyphRuntime(context: Context) : SensorEventListener {
     private var ambientBrightness = AutomaticBrightnessController(
         cachedAmbientLux?.let { AutomaticBrightnessController.targetScaleForLux(it) } ?: 1f
     )
-    private val screenBrightness = ScreenBrightnessMonitor(appContext)
+    private val brightnessWake = Channel<Unit>(Channel.CONFLATED)
+    private val screenBrightness = ScreenBrightnessMonitor(appContext) {
+        brightnessWake.trySend(Unit)
+    }
     private val engine = MatrixEngine()
     private val clockFrames = MinuteClockFrameCache()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -61,7 +66,6 @@ class GlyphRuntime(context: Context) : SensorEventListener {
     private var manager: GlyphMatrixManager? = null
     private var loop: Job? = null
     private var lastClockHardwareFrame: IntArray? = null
-    private var lastObservedAutomaticScale = Float.NaN
 
     private val callback = object : GlyphMatrixManager.Callback {
         override fun onServiceConnected(componentName: ComponentName?) {
@@ -122,16 +126,16 @@ class GlyphRuntime(context: Context) : SensorEventListener {
                             lastClockHardwareFrame = hardwareFrame
                         }
                     }
-                    val brightnessIsMoving = lastObservedAutomaticScale.isFinite() &&
-                        abs(automatic - lastObservedAutomaticScale) > CLOCK_SCALE_EPSILON
-                    lastObservedAutomaticScale = automatic
-                    delay(
-                        if (clockVisible) {
-                            if (brightnessIsMoving) CLOCK_BRIGHTNESS_STEP_MS else CLOCK_IDLE_POLL_MS
+                    if (clockVisible) {
+                        val waitMillis = if (automaticBrightnessIsMoving(current)) {
+                            CLOCK_BRIGHTNESS_STEP_MS
                         } else {
-                            1000L / current.frameRate.coerceIn(8, 30)
+                            CLOCK_IDLE_POLL_MS
                         }
-                    )
+                        withTimeoutOrNull(waitMillis) { brightnessWake.receive() }
+                    } else {
+                        delay(1000L / current.frameRate.coerceIn(8, 30))
+                    }
                 }
             }
         }
@@ -139,6 +143,7 @@ class GlyphRuntime(context: Context) : SensorEventListener {
 
     fun updateConfig(newConfig: MatrixConfig) {
         config = newConfig
+        brightnessWake.trySend(Unit)
     }
 
     fun setOutputEnabled(enabled: Boolean) {
@@ -166,6 +171,7 @@ class GlyphRuntime(context: Context) : SensorEventListener {
                 val lux = event.values[0].coerceAtLeast(0f)
                 lastReliableLux = lux
                 ambientBrightness.updateAmbientLux(lux, event.timestamp)
+                brightnessWake.trySend(Unit)
             }
             return
         }
@@ -186,14 +192,22 @@ class GlyphRuntime(context: Context) : SensorEventListener {
     private fun automaticScale(current: MatrixConfig): Float {
         if (!current.autoBrightness) return 1f
         return when (current.autoBrightnessSource) {
-            AutoBrightnessSource.AMBIENT_LIGHT -> ambientBrightness.scale
+            AutoBrightnessSource.AMBIENT_LIGHT ->
+                ambientBrightness.advance(SystemClock.elapsedRealtimeNanos())
             AutoBrightnessSource.SCREEN_BRIGHTNESS -> screenBrightness.scale
         }
     }
 
+    private fun automaticBrightnessIsMoving(current: MatrixConfig): Boolean {
+        if (!current.autoBrightness) return false
+        return when (current.autoBrightnessSource) {
+            AutoBrightnessSource.AMBIENT_LIGHT -> ambientBrightness.isTransitioning
+            AutoBrightnessSource.SCREEN_BRIGHTNESS -> screenBrightness.isTransitioning
+        }
+    }
+
     private companion object {
-        const val CLOCK_BRIGHTNESS_STEP_MS = 250L
+        const val CLOCK_BRIGHTNESS_STEP_MS = 1000L / 24L
         const val CLOCK_IDLE_POLL_MS = 1_000L
-        const val CLOCK_SCALE_EPSILON = 0.001f
     }
 }

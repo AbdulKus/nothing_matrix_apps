@@ -10,27 +10,37 @@ class AutomaticBrightnessController(initialScale: Float = 1f) {
     var scale: Float = initialScale.coerceIn(0f, 1f)
         private set
 
-    private var lastTimestampNanos = 0L
+    val isTransitioning: Boolean
+        @Synchronized get() {
+            val tolerance = if (snapInsideDeadband) SETTLED_TOLERANCE else DEADBAND
+            return abs(targetScale - scale) >= tolerance
+        }
 
+    private var lastTimestampNanos = 0L
+    private var targetScale = scale
+    private var snapInsideDeadband = false
+
+    @Synchronized
     fun updateAmbientLux(lux: Float, timestampNanos: Long): Float {
         if (!lux.isFinite() || lux < 0f) return scale
-        return updateTarget(targetScaleForLux(lux), timestampNanos, snapInsideDeadband = false)
+        targetScale = targetScaleForLux(lux)
+        snapInsideDeadband = false
+        return advanceLocked(timestampNanos)
     }
 
-    fun updateScreenBrightness(brightness: Int, timestampNanos: Long): Float =
-        updateTarget(
-            targetScaleForScreenBrightness(brightness),
-            timestampNanos,
-            snapInsideDeadband = true
-        )
+    @Synchronized
+    fun updateScreenBrightness(brightness: Int, timestampNanos: Long): Float {
+        targetScale = targetScaleForScreenBrightness(brightness)
+        snapInsideDeadband = true
+        return advanceLocked(timestampNanos)
+    }
 
-    private fun updateTarget(
-        target: Float,
-        timestampNanos: Long,
-        snapInsideDeadband: Boolean
-    ): Float {
+    @Synchronized
+    fun advance(timestampNanos: Long): Float = advanceLocked(timestampNanos)
+
+    private fun advanceLocked(timestampNanos: Long): Float {
         if (lastTimestampNanos == 0L || timestampNanos <= lastTimestampNanos) {
-            scale = target
+            scale = targetScale
             lastTimestampNanos = timestampNanos
             return scale
         }
@@ -38,19 +48,20 @@ class AutomaticBrightnessController(initialScale: Float = 1f) {
         val elapsedSeconds = ((timestampNanos - lastTimestampNanos) / 1_000_000_000.0)
             .coerceIn(0.0, 5.0)
         lastTimestampNanos = timestampNanos
-        if (abs(target - scale) < DEADBAND) {
-            if (snapInsideDeadband) scale = target
+        if (abs(targetScale - scale) < DEADBAND) {
+            if (snapInsideDeadband) scale = targetScale
             return scale
         }
 
-        val timeConstant = if (target > scale) BRIGHTEN_TIME_SECONDS else DIM_TIME_SECONDS
+        val timeConstant = if (targetScale > scale) BRIGHTEN_TIME_SECONDS else DIM_TIME_SECONDS
         val alpha = (1.0 - exp(-elapsedSeconds / timeConstant)).toFloat()
-        scale += (target - scale) * alpha
+        scale += (targetScale - scale) * alpha
         return scale
     }
 
     companion object {
         private const val DEADBAND = 0.025f
+        private const val SETTLED_TOLERANCE = 0.005f
         private const val BRIGHTEN_TIME_SECONDS = 0.8
         private const val DIM_TIME_SECONDS = 2.5
 

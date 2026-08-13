@@ -16,6 +16,7 @@ import android.os.Looper
 import android.os.Message
 import android.os.Messenger
 import android.os.PowerManager
+import android.os.SystemClock
 import com.abdulkus.glyphlab.data.AutoBrightnessSource
 import com.abdulkus.glyphlab.data.ConfigStore
 import com.abdulkus.glyphlab.data.EffectType
@@ -30,15 +31,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.abs
+import kotlinx.coroutines.withTimeoutOrNull
 
 class MatrixToyService : Service(), SensorEventListener {
     private val engine = MatrixEngine()
     private val clockFrames = MinuteClockFrameCache()
+    private val brightnessWake = Channel<Unit>(Channel.CONFLATED)
     private var scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var renderJob: Job? = null
     private var manager: GlyphMatrixManager? = null
@@ -58,7 +61,6 @@ class MatrixToyService : Service(), SensorEventListener {
     private var screenFacesDown = false
     private var lastReliableLux: Float? = null
     private var lastClockHardwareFrame: IntArray? = null
-    private var lastObservedAutomaticScale = Float.NaN
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -124,7 +126,9 @@ class MatrixToyService : Service(), SensorEventListener {
         configStore = ConfigStore(this)
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        screenBrightness = ScreenBrightnessMonitor(this)
+        screenBrightness = ScreenBrightnessMonitor(this) {
+            brightnessWake.trySend(Unit)
+        }
         motionSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
             ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
@@ -210,16 +214,16 @@ class MatrixToyService : Service(), SensorEventListener {
                     }
                     lastClockHardwareFrame = hardwareFrame
                 }
-                val brightnessIsMoving = lastObservedAutomaticScale.isFinite() &&
-                    abs(automatic - lastObservedAutomaticScale) > CLOCK_SCALE_EPSILON
-                lastObservedAutomaticScale = automatic
-                delay(
-                    if (clockVisible) {
-                        if (brightnessIsMoving) CLOCK_BRIGHTNESS_STEP_MS else CLOCK_IDLE_POLL_MS
+                if (clockVisible) {
+                    val waitMillis = if (automaticBrightnessIsMoving(current)) {
+                        CLOCK_BRIGHTNESS_STEP_MS
                     } else {
-                        1000L / current.frameRate.coerceIn(8, 18)
+                        CLOCK_IDLE_POLL_MS
                     }
-                )
+                    withTimeoutOrNull(waitMillis) { brightnessWake.receive() }
+                } else {
+                    delay(1000L / current.frameRate.coerceIn(8, 18))
+                }
             }
         }
     }
@@ -242,8 +246,17 @@ class MatrixToyService : Service(), SensorEventListener {
     private fun automaticScale(current: MatrixConfig): Float {
         if (!current.autoBrightness) return 1f
         return when (current.autoBrightnessSource) {
-            AutoBrightnessSource.AMBIENT_LIGHT -> ambientBrightness.scale
+            AutoBrightnessSource.AMBIENT_LIGHT ->
+                ambientBrightness.advance(SystemClock.elapsedRealtimeNanos())
             AutoBrightnessSource.SCREEN_BRIGHTNESS -> screenBrightness.scale
+        }
+    }
+
+    private fun automaticBrightnessIsMoving(current: MatrixConfig): Boolean {
+        if (!current.autoBrightness) return false
+        return when (current.autoBrightnessSource) {
+            AutoBrightnessSource.AMBIENT_LIGHT -> ambientBrightness.isTransitioning
+            AutoBrightnessSource.SCREEN_BRIGHTNESS -> screenBrightness.isTransitioning
         }
     }
 
@@ -296,6 +309,7 @@ class MatrixToyService : Service(), SensorEventListener {
                 val lux = event.values[0].coerceAtLeast(0f)
                 lastReliableLux = lux
                 ambientBrightness.updateAmbientLux(lux, event.timestamp)
+                brightnessWake.trySend(Unit)
             }
             return
         }
@@ -314,8 +328,7 @@ class MatrixToyService : Service(), SensorEventListener {
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
     private companion object {
-        const val CLOCK_BRIGHTNESS_STEP_MS = 250L
+        const val CLOCK_BRIGHTNESS_STEP_MS = 1000L / 24L
         const val CLOCK_IDLE_POLL_MS = 1_000L
-        const val CLOCK_SCALE_EPSILON = 0.001f
     }
 }

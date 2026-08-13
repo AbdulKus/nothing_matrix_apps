@@ -9,7 +9,10 @@ import android.provider.Settings
 import kotlin.math.abs
 
 /** Observes the public system screen-brightness setting without polling frames. */
-class ScreenBrightnessMonitor(context: Context) {
+class ScreenBrightnessMonitor(
+    context: Context,
+    private val onScaleChanged: () -> Unit = {}
+) {
     private val resolver = context.applicationContext.contentResolver
     private val handler = Handler(Looper.getMainLooper())
     private val initialBrightness = readBrightness()
@@ -22,12 +25,17 @@ class ScreenBrightnessMonitor(context: Context) {
     val scale: Float
         get() = controller.scale
 
+    val isTransitioning: Boolean
+        get() = controller.isTransitioning
+
     private val ramp = object : Runnable {
         override fun run() {
+            val previousScale = controller.scale
             controller.updateScreenBrightness(
                 targetBrightness,
                 SystemClock.elapsedRealtimeNanos()
             )
+            if (abs(controller.scale - previousScale) > 0.0001f) onScaleChanged()
             val target = AutomaticBrightnessController.targetScaleForScreenBrightness(
                 targetBrightness
             )
@@ -71,6 +79,6 @@ class ScreenBrightnessMonitor(context: Context) {
     )
 
     private companion object {
-        const val RAMP_STEP_MS = 100L
+        const val RAMP_STEP_MS = 1000L / 24L
     }
 }

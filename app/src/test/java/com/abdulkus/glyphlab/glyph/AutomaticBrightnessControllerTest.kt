@@ -58,6 +58,18 @@ class AutomaticBrightnessControllerTest {
     }
 
     @Test
+    fun frameTicksContinueSmoothingTowardTheLatestAmbientTarget() {
+        val controller = AutomaticBrightnessController()
+        controller.updateAmbientLux(100f, 1_000_000_000L)
+        controller.updateAmbientLux(10_000f, 1_041_000_000L)
+        val firstFrame = controller.scale
+        val secondFrame = controller.advance(1_082_000_000L)
+
+        assertTrue(secondFrame > firstFrame)
+        assertTrue(secondFrame < 1f)
+    }
+
+    @Test
     fun invalidSensorReadingDoesNotChangeBrightness() {
         val controller = AutomaticBrightnessController(
             AutomaticBrightnessController.targetScaleForLux(100f)
