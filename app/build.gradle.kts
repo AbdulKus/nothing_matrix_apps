@@ -17,14 +17,14 @@ val releaseSigningConfigured = listOf(
 
 android {
     namespace = "com.abdulkus.glyphlab"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.abdulkus.glyphlab"
         minSdk = 34
-        targetSdk = 35
-        versionCode = 16
-        versionName = "0.3.8"
+        targetSdk = 36
+        versionCode = 17
+        versionName = "0.3.9"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
