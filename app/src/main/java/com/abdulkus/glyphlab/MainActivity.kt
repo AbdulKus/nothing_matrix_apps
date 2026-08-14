@@ -437,9 +437,15 @@ private fun SettingsPanel(config: MatrixConfig, onChange: (MatrixConfig) -> Unit
 
 @Composable
 private fun ClockSettings(config: MatrixConfig, onChange: (MatrixConfig) -> Unit) {
-    Label("РЕЖИМ СНА")
-    ToggleRow("Часы во время сна", config.sleepClockEnabled) {
-        onChange(config.copy(sleepClockEnabled = it))
+    Label(if (config.effect == EffectType.CLOCK) "ОТОБРАЖЕНИЕ" else "РЕЖИМ СНА")
+    if (config.effect == EffectType.CLOCK) {
+        ToggleRow("Только на блокировке", config.clockLockScreenOnly) {
+            onChange(config.copy(clockLockScreenOnly = it))
+        }
+    } else {
+        ToggleRow("Часы во время сна", config.sleepClockEnabled) {
+            onChange(config.copy(sleepClockEnabled = it))
+        }
     }
 }
 
