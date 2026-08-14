@@ -39,5 +39,6 @@ data class MatrixConfig(
     val particleCount: Int = 28,
     val showVertices: Boolean = true,
     val frameRate: Int = 24,
-    val sleepClockEnabled: Boolean = false
+    val sleepClockEnabled: Boolean = false,
+    val clockLockScreenOnly: Boolean = false
 )

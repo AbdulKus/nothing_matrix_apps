@@ -1,5 +1,6 @@
 package com.abdulkus.glyphlab.glyph
 
+import android.app.KeyguardManager
 import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.ComponentName
@@ -19,7 +20,6 @@ import android.os.PowerManager
 import android.os.SystemClock
 import com.abdulkus.glyphlab.data.AutoBrightnessSource
 import com.abdulkus.glyphlab.data.ConfigStore
-import com.abdulkus.glyphlab.data.EffectType
 import com.abdulkus.glyphlab.data.MatrixConfig
 import com.abdulkus.glyphlab.engine.MatrixEngine
 import com.abdulkus.glyphlab.engine.MinuteClockFrameCache
@@ -48,6 +48,7 @@ class MatrixToyService : Service(), SensorEventListener {
     private lateinit var configStore: ConfigStore
     private lateinit var sensorManager: SensorManager
     private lateinit var powerManager: PowerManager
+    private lateinit var keyguardManager: KeyguardManager
     private lateinit var screenBrightness: ScreenBrightnessMonitor
     private var motionSensor: Sensor? = null
     private var lightSensor: Sensor? = null
@@ -75,6 +76,13 @@ class MatrixToyService : Service(), SensorEventListener {
                 }
                 Intent.ACTION_SCREEN_ON -> {
                     registerLightSensor()
+                    renderSingleFrame()
+                    ensureRenderLoop()
+                }
+                Intent.ACTION_USER_PRESENT -> {
+                    // The display can turn on while the keyguard is still
+                    // visible. Blank lock-only clocks exactly when the user
+                    // actually unlocks the phone.
                     renderSingleFrame()
                     ensureRenderLoop()
                 }
@@ -126,6 +134,7 @@ class MatrixToyService : Service(), SensorEventListener {
         configStore = ConfigStore(this)
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
         screenBrightness = ScreenBrightnessMonitor(this) {
             brightnessWake.trySend(Unit)
         }
@@ -155,6 +164,7 @@ class MatrixToyService : Service(), SensorEventListener {
                 IntentFilter().apply {
                     addAction(Intent.ACTION_SCREEN_OFF)
                     addAction(Intent.ACTION_SCREEN_ON)
+                    addAction(Intent.ACTION_USER_PRESENT)
                 },
                 Context.RECEIVER_NOT_EXPORTED
             )
@@ -198,9 +208,10 @@ class MatrixToyService : Service(), SensorEventListener {
             while (isActive) {
                 config = configStore.load()
                 val current = config
-                val clockVisible = isClockVisible(current)
-                if (!clockVisible) lastClockHardwareFrame = null
-                val frame = frameForCurrentState(current)
+                val outputMode = outputMode(current)
+                val lowPowerOutput = outputMode != MatrixOutputMode.EFFECT
+                if (!lowPowerOutput) lastClockHardwareFrame = null
+                val frame = frameForCurrentState(current, outputMode)
                 val automatic = automaticScale(current)
                 val hardwareFrame = HardwareFrameMapper.forGlyphToy(
                     frame,
@@ -208,13 +219,13 @@ class MatrixToyService : Service(), SensorEventListener {
                     automatic,
                     current.minimumBrightness
                 )
-                if (!clockVisible || lastClockHardwareFrame?.contentEquals(hardwareFrame) != true) {
+                if (!lowPowerOutput || lastClockHardwareFrame?.contentEquals(hardwareFrame) != true) {
                     withContext(Dispatchers.Main.immediate) {
                         runCatching { manager?.setMatrixFrame(hardwareFrame) }
                     }
                     lastClockHardwareFrame = hardwareFrame
                 }
-                if (clockVisible) {
+                if (lowPowerOutput) {
                     val waitMillis = if (automaticBrightnessIsMoving(current)) {
                         CLOCK_BRIGHTNESS_STEP_MS
                     } else {
@@ -230,7 +241,7 @@ class MatrixToyService : Service(), SensorEventListener {
 
     private fun renderSingleFrame() {
         config = configStore.load()
-        val frame = frameForCurrentState(config)
+        val frame = frameForCurrentState(config, outputMode(config))
         runCatching {
             manager?.setMatrixFrame(
                 HardwareFrameMapper.forGlyphToy(
@@ -260,16 +271,21 @@ class MatrixToyService : Service(), SensorEventListener {
         }
     }
 
-    private fun frameForCurrentState(current: MatrixConfig): IntArray =
-        if (isClockVisible(current)) {
-            clockFrames.frame(masterBrightness = current.brightness)
-        } else {
-            engine.render(current, System.nanoTime(), tiltX, tiltY)
-        }
+    private fun frameForCurrentState(
+        current: MatrixConfig,
+        outputMode: MatrixOutputMode
+    ): IntArray = when (outputMode) {
+        MatrixOutputMode.CLOCK -> clockFrames.frame(masterBrightness = current.brightness)
+        MatrixOutputMode.OFF -> OFF_FRAME
+        MatrixOutputMode.EFFECT -> engine.render(current, System.nanoTime(), tiltX, tiltY)
+    }
 
-    private fun isClockVisible(current: MatrixConfig): Boolean =
-        current.effect == EffectType.CLOCK ||
-            (current.sleepClockEnabled && !powerManager.isInteractive)
+    private fun outputMode(current: MatrixConfig): MatrixOutputMode =
+        resolveMatrixOutputMode(
+            config = current,
+            isInteractive = powerManager.isInteractive,
+            isDeviceLocked = keyguardManager.isDeviceLocked
+        )
 
     private fun unregisterScreenReceiver() {
         if (!screenReceiverRegistered) return
@@ -330,5 +346,6 @@ class MatrixToyService : Service(), SensorEventListener {
     private companion object {
         const val CLOCK_BRIGHTNESS_STEP_MS = 1000L / 24L
         const val CLOCK_IDLE_POLL_MS = 1_000L
+        val OFF_FRAME = IntArray(MatrixEngine.PIXEL_COUNT)
     }
 }

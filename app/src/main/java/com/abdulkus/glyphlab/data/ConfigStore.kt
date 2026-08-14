@@ -33,7 +33,8 @@ class ConfigStore(context: Context) {
             // Migrate the single useful value from versions that exposed the
             // configurable clock overlay.
             prefs.getBoolean(KEY_LEGACY_CLOCK_ENABLED, false)
-        )
+        ),
+        clockLockScreenOnly = prefs.getBoolean(KEY_CLOCK_LOCK_SCREEN_ONLY, false)
     )
 
     fun save(config: MatrixConfig) {
@@ -56,6 +57,7 @@ class ConfigStore(context: Context) {
             .putBoolean(KEY_VERTICES, config.showVertices)
             .putInt(KEY_FRAME_RATE, config.frameRate)
             .putBoolean(KEY_SLEEP_CLOCK_ENABLED, config.sleepClockEnabled)
+            .putBoolean(KEY_CLOCK_LOCK_SCREEN_ONLY, config.clockLockScreenOnly)
             .apply()
     }
 
@@ -102,6 +104,7 @@ class ConfigStore(context: Context) {
         const val KEY_VERTICES = "vertices"
         const val KEY_FRAME_RATE = "frame_rate"
         const val KEY_SLEEP_CLOCK_ENABLED = "sleep_clock_enabled"
+        const val KEY_CLOCK_LOCK_SCREEN_ONLY = "clock_lock_screen_only"
         const val KEY_LEGACY_CLOCK_ENABLED = "clock_enabled"
         const val AMBIENT_LUX_MAX_AGE_MS = 2L * 60L * 60L * 1000L
     }
