@@ -26,6 +26,14 @@ class AutomaticBrightnessControllerTest {
     }
 
     @Test
+    fun darkRoomCurveStaysConservative() {
+        assertTrue(AutomaticBrightnessController.targetScaleForLux(1f) <= 0.01f)
+        assertTrue(AutomaticBrightnessController.targetScaleForLux(5f) <= 0.025f)
+        assertTrue(AutomaticBrightnessController.targetScaleForLux(20f) <= 0.06f)
+        assertTrue(AutomaticBrightnessController.targetScaleForLux(100f) >= 0.10f)
+    }
+
+    @Test
     fun screenBrightnessIsLinkedLinearlyAcrossTheConfiguredRange() {
         assertEquals(0f, AutomaticBrightnessController.targetScaleForScreenBrightness(0), 0.0001f)
         assertEquals(10f / 255f, AutomaticBrightnessController.targetScaleForScreenBrightness(10), 0.0001f)
@@ -34,36 +42,61 @@ class AutomaticBrightnessControllerTest {
     }
 
     @Test
-    fun subsequentReadingsMoveSmoothlyTowardTarget() {
-        val controller = AutomaticBrightnessController()
-        controller.updateAmbientLux(100f, 1_000_000_000L)
-        val start = controller.scale
-        val afterOneSecond = controller.updateAmbientLux(10_000f, 2_000_000_000L)
+    fun firstReadingNeverSnapsBrightness() {
+        val controller = AutomaticBrightnessController(0.10f)
+        val first = controller.updateAmbientLux(100f, 1_000_000_000L)
 
-        assertEquals(0.33f, start, 0.0001f)
-        assertTrue(afterOneSecond > start)
-        assertTrue(afterOneSecond < 1f)
+        assertEquals(0.10f, first, 0.0001f)
     }
 
     @Test
-    fun screenChangesUseTheSameSmoothing() {
-        val controller = AutomaticBrightnessController()
-        controller.updateScreenBrightness(64, 1_000_000_000L)
-        val start = controller.scale
+    fun genuineLightIncreaseStillRespondsQuickly() {
+        val controller = AutomaticBrightnessController(0.01f)
+        controller.updateAmbientLux(1f, 1_000_000_000L)
+        controller.updateAmbientLux(500f, 1_200_000_000L)
+        controller.updateAmbientLux(500f, 1_400_000_000L)
+        controller.updateAmbientLux(500f, 1_600_000_000L)
+        val after = controller.advance(2_200_000_000L)
+
+        assertTrue(after > 0.10f)
+        assertTrue(after < 0.30f)
+    }
+
+    @Test
+    fun noisyNightReadingsDoNotCreateVisiblePulsing() {
+        val initial = AutomaticBrightnessController.targetScaleForLux(2f)
+        val controller = AutomaticBrightnessController(initial)
+        val readings = floatArrayOf(0.5f, 4f, 0.8f, 3.5f, 1.2f, 5f, 0.7f, 2.5f, 1f)
+        val scales = mutableListOf<Float>()
+        var timestamp = 1_000_000_000L
+
+        readings.forEach { lux ->
+            scales += controller.updateAmbientLux(lux, timestamp)
+            timestamp += 200_000_000L
+        }
+
+        assertTrue((scales.maxOrNull()!! - scales.minOrNull()!!) < 0.015f)
+    }
+
+    @Test
+    fun screenChangesUseSmoothingWithoutFirstTickJump() {
+        val controller = AutomaticBrightnessController(64f / 255f)
+        val first = controller.updateScreenBrightness(255, 1_000_000_000L)
         val afterOneSecond = controller.updateScreenBrightness(255, 2_000_000_000L)
 
-        assertEquals(64f / 255f, start, 0.0001f)
-        assertTrue(afterOneSecond > start)
+        assertEquals(64f / 255f, first, 0.0001f)
+        assertTrue(afterOneSecond > first)
         assertTrue(afterOneSecond < 1f)
     }
 
     @Test
     fun frameTicksContinueSmoothingTowardTheLatestAmbientTarget() {
-        val controller = AutomaticBrightnessController()
-        controller.updateAmbientLux(100f, 1_000_000_000L)
-        controller.updateAmbientLux(10_000f, 1_041_000_000L)
+        val controller = AutomaticBrightnessController(0.02f)
+        controller.updateAmbientLux(5f, 1_000_000_000L)
+        controller.updateAmbientLux(500f, 1_200_000_000L)
+        controller.updateAmbientLux(500f, 1_400_000_000L)
         val firstFrame = controller.scale
-        val secondFrame = controller.advance(1_082_000_000L)
+        val secondFrame = controller.advance(1_800_000_000L)
 
         assertTrue(secondFrame > firstFrame)
         assertTrue(secondFrame < 1f)
