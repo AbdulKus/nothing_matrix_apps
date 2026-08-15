@@ -20,10 +20,25 @@ class AutomaticBrightnessController(initialScale: Float = 1f) {
     private var targetScale = scale
     private var snapInsideDeadband = false
 
+    private val ambientSamples = FloatArray(AMBIENT_MEDIAN_WINDOW)
+    private var ambientSampleCount = 0
+    private var ambientSampleIndex = 0
+    private var filteredAmbientLogLux: Double? = null
+    private var lastAmbientTimestampNanos = 0L
+
     @Synchronized
     fun updateAmbientLux(lux: Float, timestampNanos: Long): Float {
         if (!lux.isFinite() || lux < 0f) return scale
-        targetScale = targetScaleForLux(lux)
+
+        val filteredLux = filterAmbientLuxLocked(lux, timestampNanos)
+        val nextTarget = targetScaleForLux(filteredLux)
+
+        // The light sensor is especially noisy close to darkness. Do not chase
+        // tiny target changes there; wait until they add up to something visible.
+        if (ambientSampleCount == 1 || abs(nextTarget - targetScale) >= AMBIENT_TARGET_HYSTERESIS) {
+            targetScale = nextTarget
+        }
+
         snapInsideDeadband = false
         return advanceLocked(timestampNanos)
     }
@@ -38,12 +53,55 @@ class AutomaticBrightnessController(initialScale: Float = 1f) {
     @Synchronized
     fun advance(timestampNanos: Long): Float = advanceLocked(timestampNanos)
 
+    private fun filterAmbientLuxLocked(lux: Float, timestampNanos: Long): Float {
+        ambientSamples[ambientSampleIndex] = lux
+        ambientSampleIndex = (ambientSampleIndex + 1) % AMBIENT_MEDIAN_WINDOW
+        if (ambientSampleCount < AMBIENT_MEDIAN_WINDOW) ambientSampleCount++
+
+        val sorted = FloatArray(ambientSampleCount) { ambientSamples[it] }.apply { sort() }
+        val median = if (sorted.size % 2 == 1) {
+            sorted[sorted.size / 2]
+        } else {
+            (sorted[sorted.size / 2 - 1] + sorted[sorted.size / 2]) * 0.5f
+        }
+
+        // Filter in log-lux space because a 1 -> 3 lux change is much more
+        // meaningful than 501 -> 503 lux. This keeps night readings calm while
+        // still reacting promptly when the room genuinely gets brighter.
+        val measuredLogLux = ln(median.toDouble() + 1.0)
+        val previousLogLux = filteredAmbientLogLux
+        if (
+            previousLogLux == null ||
+            lastAmbientTimestampNanos == 0L ||
+            timestampNanos <= lastAmbientTimestampNanos
+        ) {
+            filteredAmbientLogLux = measuredLogLux
+            lastAmbientTimestampNanos = timestampNanos
+            return median
+        }
+
+        val elapsedSeconds = ((timestampNanos - lastAmbientTimestampNanos) / 1_000_000_000.0)
+            .coerceIn(0.0, 2.0)
+        lastAmbientTimestampNanos = timestampNanos
+        val timeConstant = if (measuredLogLux > previousLogLux) {
+            AMBIENT_FILTER_BRIGHTEN_TIME_SECONDS
+        } else {
+            AMBIENT_FILTER_DIM_TIME_SECONDS
+        }
+        val alpha = 1.0 - exp(-elapsedSeconds / timeConstant)
+        val filteredLogLux = previousLogLux + (measuredLogLux - previousLogLux) * alpha
+        filteredAmbientLogLux = filteredLogLux
+        return (exp(filteredLogLux) - 1.0).toFloat().coerceAtLeast(0f)
+    }
+
     private fun advanceLocked(timestampNanos: Long): Float {
-        if (lastTimestampNanos == 0L || timestampNanos <= lastTimestampNanos) {
-            scale = targetScale
+        // Never snap to the first sensor reading. A cold light sensor can report
+        // a transient value, which used to create a very visible one-frame flash.
+        if (lastTimestampNanos == 0L) {
             lastTimestampNanos = timestampNanos
             return scale
         }
+        if (timestampNanos <= lastTimestampNanos) return scale
 
         val elapsedSeconds = ((timestampNanos - lastTimestampNanos) / 1_000_000_000.0)
             .coerceIn(0.0, 5.0)
@@ -60,13 +118,21 @@ class AutomaticBrightnessController(initialScale: Float = 1f) {
     }
 
     companion object {
-        private const val DEADBAND = 0.025f
-        private const val SETTLED_TOLERANCE = 0.005f
-        private const val BRIGHTEN_TIME_SECONDS = 0.8
-        private const val DIM_TIME_SECONDS = 2.5
+        private const val DEADBAND = 0.006f
+        private const val SETTLED_TOLERANCE = 0.003f
+        private const val BRIGHTEN_TIME_SECONDS = 0.65
+        private const val DIM_TIME_SECONDS = 1.35
 
+        private const val AMBIENT_MEDIAN_WINDOW = 3
+        private const val AMBIENT_TARGET_HYSTERESIS = 0.008f
+        private const val AMBIENT_FILTER_BRIGHTEN_TIME_SECONDS = 0.30
+        private const val AMBIENT_FILTER_DIM_TIME_SECONDS = 0.55
+
+        // Keep the bottom of the curve deliberately compressed. Glyph Toy output
+        // receives additional AOD gain later, so the old 2/8/16% targets at
+        // 1/5/20 lux became disproportionately bright in a dark room.
         private val LUX_POINTS = floatArrayOf(0f, 1f, 5f, 20f, 100f, 500f, 2_000f, 10_000f)
-        private val SCALE_POINTS = floatArrayOf(0f, 0.02f, 0.08f, 0.16f, 0.33f, 0.59f, 0.81f, 1f)
+        private val SCALE_POINTS = floatArrayOf(0f, 0.005f, 0.018f, 0.045f, 0.12f, 0.30f, 0.58f, 1f)
 
         fun targetScaleForLux(lux: Float): Float {
             val value = lux.takeIf { it.isFinite() }?.coerceAtLeast(0f) ?: 0f
