@@ -64,7 +64,7 @@ object HardwareFrameMapper {
                 // 255/4095 (~6.2% of the available LED level).
                 val source = (input / PREVIEW_MAX / master).coerceIn(0.0, 1.0)
                 (MATRIX_MAX * source.pow(OUTPUT_GAMMA) * effectiveBrightness * outputGain)
-                    .roundToInt().coerceAtLeast(1)
+                    .roundToInt().coerceIn(1, MATRIX_MAX)
             }
         }
     }
