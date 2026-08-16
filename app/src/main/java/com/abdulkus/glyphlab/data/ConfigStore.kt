@@ -17,7 +17,7 @@ class ConfigStore(context: Context) {
         accelerometer = prefs.getBoolean(KEY_ACCELEROMETER, true),
         sensorStrength = prefs.getFloat(KEY_SENSOR_STRENGTH, 0.75f),
         brightness = prefs.getFloat(KEY_BRIGHTNESS, 0.9f),
-        minimumBrightness = prefs.getFloat(KEY_MINIMUM_BRIGHTNESS, 0.07f),
+        minimumBrightness = prefs.getFloat(KEY_MINIMUM_BRIGHTNESS, 0.01f),
         autoBrightness = prefs.getBoolean(KEY_AUTO_BRIGHTNESS, false),
         autoBrightnessSource = prefs.enum(
             KEY_AUTO_BRIGHTNESS_SOURCE,
@@ -101,7 +101,7 @@ class ConfigStore(context: Context) {
         const val KEY_INTENSITY = "intensity"
         const val KEY_TRAIL = "trail"
         const val KEY_PARTICLES = "particles"
-        const val KEY_VERTICES = "vertices"
+        const val KEY_VERTICES = "show_vertices"
         const val KEY_FRAME_RATE = "frame_rate"
         const val KEY_SLEEP_CLOCK_ENABLED = "sleep_clock_enabled"
         const val KEY_CLOCK_LOCK_SCREEN_ONLY = "clock_lock_screen_only"
