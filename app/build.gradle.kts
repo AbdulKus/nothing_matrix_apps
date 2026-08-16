@@ -14,6 +14,7 @@ val releaseSigningConfigured = listOf(
     releaseKeyAlias,
     releaseKeyPassword
 ).all { !it.isNullOrBlank() }
+val buildGitSha = providers.environmentVariable("GITHUB_SHA").orElse("unknown").get()
 
 android {
     namespace = "com.abdulkus.glyphlab"
@@ -23,8 +24,9 @@ android {
         applicationId = "com.abdulkus.glyphlab"
         minSdk = 34
         targetSdk = 36
-        versionCode = 18
-        versionName = "0.3.10"
+        versionCode = 19
+        versionName = "0.4.0"
+        buildConfigField("String", "GIT_SHA", "\"$buildGitSha\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -63,7 +65,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
     kotlinOptions { jvmTarget = "11" }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
     packaging.resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
 }
 
