@@ -17,7 +17,7 @@ class ConfigStore(context: Context) {
         accelerometer = prefs.getBoolean(KEY_ACCELEROMETER, true),
         sensorStrength = prefs.getFloat(KEY_SENSOR_STRENGTH, 0.75f),
         brightness = prefs.getFloat(KEY_BRIGHTNESS, 0.9f),
-        minimumBrightness = prefs.getFloat(KEY_MINIMUM_BRIGHTNESS, 0.07f),
+        minimumBrightness = prefs.getFloat(KEY_MINIMUM_BRIGHTNESS, 0.01f),
         autoBrightness = prefs.getBoolean(KEY_AUTO_BRIGHTNESS, false),
         autoBrightnessSource = prefs.enum(
             KEY_AUTO_BRIGHTNESS_SOURCE,
