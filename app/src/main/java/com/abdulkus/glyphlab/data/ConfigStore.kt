@@ -101,7 +101,7 @@ class ConfigStore(context: Context) {
         const val KEY_INTENSITY = "intensity"
         const val KEY_TRAIL = "trail"
         const val KEY_PARTICLES = "particles"
-        const val KEY_VERTICES = "show_vertices"
+        const val KEY_VERTICES = "vertices"
         const val KEY_FRAME_RATE = "frame_rate"
         const val KEY_SLEEP_CLOCK_ENABLED = "sleep_clock_enabled"
         const val KEY_CLOCK_LOCK_SCREEN_ONLY = "clock_lock_screen_only"
