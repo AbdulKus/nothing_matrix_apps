@@ -11,7 +11,7 @@ enum class AppLanguage(
     FR("FR", "fr", "Français"),
     PL("PL", "pl", "Polski"),
     UA("UA", "uk", "Українська"),
-    IN("IN", "id", "Bahasa Indonesia"),
+    HI("HI", "hi", "हिन्दी"),
     CH("CH", "zh", "中文"),
     JP("JP", "ja", "日本語"),
     KO("KO", "ko", "한국어");
@@ -164,21 +164,21 @@ object UiStrings {
         "solid_cube" to "Куб", "solid_tetra" to "Тетраедр", "solid_octa" to "Октаедр", "solid_pyramid" to "Піраміда"
     )
 
-    private val indonesian = mapOf(
-        "choose_language" to "Pilih bahasa", "settings" to "PENGATURAN", "shape" to "BENTUK", "bright_vertices" to "Titik sudut terang",
-        "rotation_axes" to "SUMBU ROTASI OTOMATIS", "intensity" to "INTENSITAS", "particles" to "PARTIKEL", "flow" to "ALIRAN",
-        "trail" to "PANJANG JEJAK", "speed" to "KECEPATAN", "minute_update" to "WAKTU DIPERBARUI SEKALI PER MENIT",
-        "auto_brightness" to "Kecerahan otomatis", "auto_source" to "SUMBER KECERAHAN OTOMATIS", "ambient" to "Sensor cahaya", "screen" to "Kecerahan layar",
-        "min_brightness" to "KECERAHAN MINIMUM", "max_brightness" to "KECERAHAN MAKSIMUM", "matrix_brightness" to "KECERAHAN MATRIKS",
-        "accelerometer" to "Akselerometer", "tilt_response" to "RESPONS KEMIRINGAN", "frame_rate" to "FRAME RATE", "display" to "TAMPILAN",
-        "sleep_mode" to "MODE TIDUR", "lock_only" to "Hanya di layar kunci", "sleep_clock" to "Jam saat tidur",
-        "start" to "▶  MULAI DI MATRIKS", "stop" to "■  HENTIKAN MATRIKS", "add_toy" to "TAMBAHKAN KE ALWAYS-ON GLYPH TOYS",
-        "toy_hint" to "Buka: Glyph Interface → Flip to Glyph → Always-on Glyph Toy", "language" to "Bahasa", "github" to "GitHub", "donate" to "Donasi",
-        "update_available" to "PEMBARUAN TERSEDIA", "update_body" to "Build Glyph Lab yang lebih baru tersedia di GitHub.", "download" to "UNDUH",
-        "downloading" to "MENGUNDUH", "install" to "INSTAL", "install_permission" to "Izinkan Glyph Lab menginstal aplikasi; penginstal akan terbuka otomatis.",
-        "update_error" to "Tidak dapat memeriksa atau mengunduh pembaruan.", "effect_wireframe" to "BENTUK 3D", "effect_fire" to "API",
-        "effect_gravity" to "PASIR", "effect_plasma" to "PLASMA", "effect_starfield" to "BINTANG", "effect_clock" to "JAM",
-        "solid_cube" to "Kubus", "solid_tetra" to "Tetrahedron", "solid_octa" to "Oktahedron", "solid_pyramid" to "Piramida"
+    private val hindi = mapOf(
+        "choose_language" to "भाषा चुनें", "settings" to "सेटिंग्स", "shape" to "आकार", "bright_vertices" to "चमकीले कोने",
+        "rotation_axes" to "ऑटो-रोटेशन अक्ष", "intensity" to "तीव्रता", "particles" to "कण", "flow" to "प्रवाह",
+        "trail" to "ट्रेल लंबाई", "speed" to "गति", "minute_update" to "समय हर मिनट अपडेट होता है",
+        "auto_brightness" to "ऑटो ब्राइटनेस", "auto_source" to "ऑटो ब्राइटनेस स्रोत", "ambient" to "लाइट सेंसर", "screen" to "स्क्रीन ब्राइटनेस",
+        "min_brightness" to "न्यूनतम ब्राइटनेस", "max_brightness" to "अधिकतम ब्राइटनेस", "matrix_brightness" to "मैट्रिक्स ब्राइटनेस",
+        "accelerometer" to "एक्सेलेरोमीटर", "tilt_response" to "झुकाव प्रतिक्रिया", "frame_rate" to "फ्रेम रेट", "display" to "डिस्प्ले",
+        "sleep_mode" to "स्लीप मोड", "lock_only" to "केवल लॉक स्क्रीन", "sleep_clock" to "स्लीप में घड़ी",
+        "start" to "▶  मैट्रिक्स पर शुरू करें", "stop" to "■  मैट्रिक्स रोकें", "add_toy" to "ALWAYS-ON GLYPH TOYS में जोड़ें",
+        "toy_hint" to "खोलें: Glyph Interface → Flip to Glyph → Always-on Glyph Toy", "language" to "भाषा", "github" to "GitHub", "donate" to "दान",
+        "update_available" to "अपडेट उपलब्ध है", "update_body" to "GitHub पर Glyph Lab की नई बिल्ड उपलब्ध है।", "download" to "डाउनलोड",
+        "downloading" to "डाउनलोड हो रहा है", "install" to "इंस्टॉल", "install_permission" to "Glyph Lab को ऐप इंस्टॉल करने की अनुमति दें; इसके बाद इंस्टॉलर अपने आप खुल जाएगा।",
+        "update_error" to "अपडेट की जाँच या डाउनलोड नहीं हो सका।", "effect_wireframe" to "3D आकार", "effect_fire" to "आग",
+        "effect_gravity" to "रेत", "effect_plasma" to "प्लाज़्मा", "effect_starfield" to "तारे", "effect_clock" to "घड़ी",
+        "solid_cube" to "घन", "solid_tetra" to "चतुष्फलक", "solid_octa" to "अष्टफलक", "solid_pyramid" to "पिरामिड"
     )
 
     private val zh = mapOf(
@@ -230,7 +230,7 @@ object UiStrings {
 
     private val all = mapOf(
         AppLanguage.EN to en, AppLanguage.RU to ru, AppLanguage.DE to de, AppLanguage.FR to fr,
-        AppLanguage.PL to pl, AppLanguage.UA to ua, AppLanguage.IN to indonesian, AppLanguage.CH to zh,
+        AppLanguage.PL to pl, AppLanguage.UA to ua, AppLanguage.HI to hindi, AppLanguage.CH to zh,
         AppLanguage.JP to ja, AppLanguage.KO to ko
     )
 
