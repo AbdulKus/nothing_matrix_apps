@@ -536,14 +536,6 @@ private fun SettingsPanel(language: AppLanguage, config: MatrixConfig, onChange:
             .border(1.dp, Line, RoundedCornerShape(5.dp))
             .padding(16.dp)
     ) {
-        Text(
-            "${language.t("settings")} · ${effectTitle(language, config.effect)}",
-            color = Muted,
-            fontSize = 11.sp,
-            letterSpacing = 0.8.sp
-        )
-        Spacer(Modifier.height(15.dp))
-
         if (config.effect == EffectType.WIREFRAME) {
             Label(language.t("shape"))
             ChoiceRow(
