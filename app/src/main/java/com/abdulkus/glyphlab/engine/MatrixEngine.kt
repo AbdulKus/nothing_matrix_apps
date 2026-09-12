@@ -429,13 +429,14 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
         const val SIZE = 13
         const val PIXEL_COUNT = SIZE * SIZE
         const val CENTER = 6.0
-        const val MATRIX_RADIUS = 6.35f
+        private val MATRIX_ROW_WIDTHS = intArrayOf(5, 9, 11, 11, 13, 13, 13, 13, 13, 11, 11, 9, 5)
         private const val WIREFRAME_PROJECTION_SCALE = 3.45
 
         fun isInsideMatrix(x: Int, y: Int): Boolean {
-            val dx = x - CENTER
-            val dy = y - CENTER
-            return dx * dx + dy * dy <= MATRIX_RADIUS * MATRIX_RADIUS
+            if (x !in 0 until SIZE || y !in 0 until SIZE) return false
+            val width = MATRIX_ROW_WIDTHS[y]
+            val startX = (SIZE - width) / 2
+            return x in startX until (startX + width)
         }
 
         private fun index(x: Int, y: Int): Int = y * SIZE + x
