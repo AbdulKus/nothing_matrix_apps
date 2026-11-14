@@ -20,7 +20,7 @@
         android:orientation="vertical">
 
         <!-- Upper 70%: Tap to trigger live Nothing matrix weather animation and refresh -->
-        <View
+        <FrameLayout
             android:id="@+id/widget_tap_matrix"
             android:layout_width="match_parent"
             android:layout_height="0dp"
@@ -29,7 +29,7 @@
             android:focusable="true" />
 
         <!-- Lower 30%: Tap to open Glyph Lab app settings -->
-        <View
+        <FrameLayout
             android:id="@+id/widget_tap_open"
             android:layout_width="match_parent"
             android:layout_height="0dp"
