@@ -3,6 +3,7 @@ package com.abdulkus.glyphlab.engine
 import com.abdulkus.glyphlab.weather.WeatherCondition
 import org.junit.Assert.*
 import org.junit.Test
+import kotlin.math.roundToInt
 
 class WeatherRefinementTest {
     @Test fun cloudyMoonUsesTheSecondCustomerBitmapExactly() {
@@ -75,26 +76,62 @@ class WeatherRefinementTest {
         assertEquals(setOf(0, 1, 2), counts)
     }
 
-    @Test fun snowEmergesExactlyTwoRowsEarlierAsACompleteCross() {
+    @Test fun foregroundCloudOccludesSnowWhenItStartsHigher() {
+        val shape = listOf("....###..", "...#...#.", ".##.....#", "#.......#", ".#######.")
         for (condition in listOf(WeatherCondition.SNOW, WeatherCondition.HEAVY_SNOW, WeatherCondition.SLEET, WeatherCondition.SNOW_SHOWERS)) {
-            var found = false
-            repeat(1000) { tick ->
-                val t = tick / 25.0
-                val frame = WeatherRenderer.render(condition, t)
-                val cloudTop = WeatherRenderer.cloudPose(t, 0.0).second.toInt()
-                // Previously the first possible snow centre was cloudTop + 6.
-                for (x in 2..10) {
-                    val y = cloudTop + 4
-                    if (frame[y * 13 + x] == 250) {
-                        found = true
-                        listOf(-1 to 0, 1 to 0, 0 to -1, 0 to 1).forEach { (dx, dy) ->
-                            assertTrue(frame[(y + dy) * 13 + x + dx] >= 170)
+            var visibleBelowCloud = false
+            for (tx in listOf(-1f, 0f, 1f)) repeat(400) { tick ->
+                val t = tick / 10.0
+                val frame = WeatherRenderer.render(condition, t, tx)
+                val (cloudX, cloudY) = WeatherRenderer.cloudPose(t, tx.toDouble())
+                shape.forEachIndexed { dy, row ->
+                    for (dx in row.indexOf('#')..row.lastIndexOf('#')) {
+                        val x = cloudX.toInt() + dx
+                        val y = cloudY.toInt() + dy
+                        if (MatrixEngine.isInsideMatrix(x, y)) {
+                            assertEquals("$condition snow leaked through cloud", if (row[dx] == '#') 225 else 0, frame[y * 13 + x])
                         }
                     }
                 }
+                if (frame.indices.any { it / 13 > cloudY + 4 && frame[it] == 250 }) visibleBelowCloud = true
             }
-            assertTrue("$condition never emerges at the raised position", found)
+            assertTrue("$condition never leaves the cloud", visibleBelowCloud)
         }
+    }
+
+    @Test fun windCloudUsesTheExactDrawingAtAllThreeBirthHeights() {
+        val expected = listOf("...###.", ".##...#", "#.....#", ".#####.")
+        assertEquals(expected, WeatherRenderer.windCloudShape)
+        val heights = mutableSetOf<Int>()
+        var checked = 0
+        repeat(2000) { tick ->
+            val t = tick / 10.0
+            val clouds = WeatherRenderer.windClouds(t)
+            heights += clouds.map { it.y }
+            val frame = WeatherRenderer.render(WeatherCondition.WIND, t)
+            clouds.filter { it.x in 2.5..3.4 }.forEach { cloud ->
+                checked++
+                val origin = cloud.x.roundToInt()
+                expected.forEachIndexed { dy, row ->
+                    for (dx in row.indexOf('#')..row.lastIndexOf('#')) {
+                        assertEquals(if (row[dx] == '#') 190 else 0, frame[(cloud.y + dy) * 13 + origin + dx])
+                    }
+                }
+            }
+        }
+        assertEquals(setOf(1, 2, 3), heights)
+        assertTrue(checked > 20)
+    }
+
+    @Test fun windIsAChangingSineWaveWithADimTail() {
+        val gust = WeatherRenderer.WindGust(8, 6.0, 8.0, 2.5, 1.0)
+        val points = WeatherRenderer.windWave(gust, 3.0)
+        assertTrue(points.last().x - points.first().x >= 8)
+        assertTrue(points.maxOf { it.y } - points.minOf { it.y } > 1.7)
+        assertTrue(points.first().level < points.last().level * 0.15)
+        assertTrue(points.zipWithNext().all { (a, b) -> b.x > a.x && kotlin.math.abs(b.y - a.y) < 0.2 })
+        val later = WeatherRenderer.windWave(gust, 3.4)
+        assertTrue(points.zip(later).any { (a, b) -> kotlin.math.abs(a.y - b.y) > 0.5 })
     }
 
     @Test fun windGustsTravelWithFadingTailsAtDifferentHeightsOneOrTwoAtATime() {

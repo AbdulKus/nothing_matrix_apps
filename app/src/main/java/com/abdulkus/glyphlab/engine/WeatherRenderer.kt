@@ -5,6 +5,7 @@ import kotlin.math.*
 
 /** Layered weather with crisp integer-pixel rasterization. Brightness changes only for actual effects. */
 object WeatherRenderer {
+    internal val windCloudShape = listOf("...###.", ".##...#", "#.....#", ".#####.")
     private val cloudShape = listOf("....###..", "...#...#.", ".##.....#", "#.......#", ".#######.")
     // User-approved 13x13 drawing, cropped without changing any lit pixel (origin 3,2).
     private val moonShape = listOf("..####", ".####.", "####..", "####..", "####..", "####..", "####..", ".####.", "..####")
@@ -49,7 +50,6 @@ object WeatherRenderer {
             else -> {
                 val frozen = condition == WeatherCondition.FREEZING_DRIZZLE || condition == WeatherCondition.FREEZING_RAIN
                 val storm = condition in setOf(WeatherCondition.THUNDERSTORM, WeatherCondition.HEAVY_THUNDERSTORM, WeatherCondition.THUNDERSTORM_HAIL)
-                cloud(c, cloudX, cloudY, if (storm) 155 else 225)
                 c.clipTop = cloudY.toInt() + 5
                 c.clipBottom = if (frozen) 10 else 12
                 when (condition) {
@@ -72,6 +72,7 @@ object WeatherRenderer {
                 }
                 c.clipTop = 0; c.clipBottom = 12
                 if (frozen) ice(c)
+                cloud(c, cloudX, cloudY, if (storm) 155 else 225)
                 if (storm) lightning(c, t, condition == WeatherCondition.HEAVY_THUNDERSTORM, tx * 0.5, ty * 0.25)
             }
         }
@@ -103,7 +104,7 @@ object WeatherRenderer {
 
     private fun particles(c: Canvas, t: Double, interval: Double, speed: Double, kind: Kind, tx: Double, ty: Double, showers: Boolean = false) {
         val originalTop = c.clipTop
-        // Snow emerges two rows higher, in front of the cloud's lower edge.
+        // Snow starts two rows higher; the foreground cloud masks it until it emerges.
         if (kind == Kind.SNOW) c.clipTop -= 2
         samples(t, interval, speed, kind, tx).forEach { p ->
             // Vary emission density at birth. Existing particles always finish their flight.
@@ -116,7 +117,7 @@ object WeatherRenderer {
                     c.line(x - tx * 0.16, y - 0.75, x, y, 225.0)
                 }
                 Kind.SNOW -> {
-                    // Every snow particle is a complete cross on emergence; no 3-pixel substitute.
+                    // Keep the full cross in the particle layer; cloud occlusion is applied afterwards.
                     if (y.roundToInt() - 1 < c.clipTop) return@forEach
                     c.dot(x, y, 250.0)
                     for ((dx, dy) in listOf(-1 to 0, 1 to 0, 0 to -1, 0 to 1)) c.dot(x + dx, y + dy, 170.0)
@@ -279,28 +280,41 @@ object WeatherRenderer {
         }
     }
 
+    internal data class WindPoint(val x: Double, val y: Double, val level: Double)
+
+    internal fun windWave(gust: WindGust, t: Double): List<WindPoint> {
+        val phase = random(gust.id, 389) * PI * 2
+        return (0..36).map { step ->
+            val u = step / 36.0
+            val x = gust.x - 7 + u * 9
+            // Phase travels through the moving envelope, so this is not a translated sprite.
+            val y = gust.y + sin(x * 0.72 - t * 2.2 + phase) * 0.95
+            WindPoint(x, y, (20 + 210 * u.pow(1.25)) * gust.opacity)
+        }
+    }
+
+    internal data class WindCloud(val x: Double, val y: Int)
+
+    internal fun windClouds(t: Double): List<WindCloud> {
+        val current = floor(t / 6).toLong()
+        return (current - 2..current).mapNotNull { id ->
+            val age = t - (id * 6 + random(id, 373) * 0.7)
+            if (age < 0) return@mapNotNull null
+            val x = -7 + age * (2.4 + random(id, 379) * 0.4)
+            if (x > 14) return@mapNotNull null
+            WindCloud(x, 1 + (random(id, 383) * 3).toInt())
+        }
+    }
+
     private fun wind(c: Canvas, t: Double, tx: Double, ty: Double) {
         windGusts(t).forEach { gust ->
-            val cx = (gust.x + tx * 0.4).roundToInt().toDouble()
-            val cy = (gust.y + ty * 0.3).roundToInt().toDouble()
-            // One whole-pixel curl, with a hole that stays open during translation.
-            // A tightly sampled shrinking spiral would fill that hole at this resolution.
-            repeat(5) { i -> c.dot(cx - 6 + i, cy, (25 + i * 30.0) * gust.opacity) }
-            val path = listOf(-2 to 0, -2 to -1, -1 to -2, 0 to -2, 1 to -2,
-                2 to -1, 2 to 0, 1 to 1, 0 to 1, 0 to 0)
-            path.forEachIndexed { i, (dx, dy) ->
-                c.dot(cx + dx, cy + dy, (145 + i * 9.0) * gust.opacity)
+            windWave(gust, t).zipWithNext().forEach { (a, b) ->
+                c.line(a.x + tx * 0.4, a.y + ty * 0.3, b.x + tx * 0.4, b.y + ty * 0.3, b.level)
             }
         }
-        // Small foreground clouds cross the upper part of the screen with the wind.
-        val current = floor(t / 6).toLong()
-        for (id in current - 2..current) {
-            val age = t - (id * 6 + random(id, 373) * 0.7)
-            if (age < 0) continue
-            val x = -7 + age * (2.4 + random(id, 379) * 0.4) + tx * 0.4
-            if (x > 14) continue
-            val y = 1.0 + random(id, 383)
-            c.stamp(x, y, listOf("..##..", ".#..#.", "######"), 190, opaque = true)
+        // The user's small cloud is a foreground layer with a birth height of 1–3 pixels.
+        windClouds(t).forEach { cloud ->
+            c.stamp(cloud.x + tx * 0.4, cloud.y.toDouble(), windCloudShape, 190, opaque = true)
         }
     }
 
