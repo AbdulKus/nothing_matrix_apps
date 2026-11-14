@@ -36,11 +36,13 @@ class ConfigStore(context: Context) {
         ),
         clockLockScreenOnly = prefs.getBoolean(KEY_CLOCK_LOCK_SCREEN_ONLY, false),
         clockFont = prefs.enum("clock_font", ClockFont.CLASSIC),
-        clockLayout = prefs.enum("clock_layout", ClockLayout.STACKED)
+        clockLayout = prefs.enum("clock_layout", ClockLayout.STACKED),
+        clockTransition = prefs.enum("clock_transition", ClockTransition.RANDOM)
     )
 
     fun save(config: MatrixConfig) {
         prefs.edit()
+            .putString("clock_transition", config.clockTransition.name)
             .putString("clock_font", config.clockFont.name)
             .putString("clock_layout", config.clockLayout.name)
             .putString(KEY_EFFECT, config.effect.name)

@@ -6,98 +6,74 @@ import org.junit.Test
 import kotlin.math.abs
 
 class WeatherMotionTest {
-    private fun lower(frame: IntArray, firstRow: Int = 6) = frame.indices.filter { it / 13 >= firstRow && frame[it] > 0 }.toSet()
-
-    private fun components(pixels: Set<Int>): List<Set<Int>> {
-        val remaining = pixels.toMutableSet()
-        val result = mutableListOf<Set<Int>>()
-        while (remaining.isNotEmpty()) {
-            val component = mutableSetOf<Int>()
-            val queue = ArrayDeque<Int>()
-            queue.add(remaining.first())
-            while (queue.isNotEmpty()) {
-                val p = queue.removeFirst()
-                if (!remaining.remove(p)) continue
-                component += p
-                listOf(p - 1, p + 1, p - 13, p + 13).filter { q ->
-                    q in remaining && abs(q % 13 - p % 13) + abs(q / 13 - p / 13) == 1
-                }.forEach { queue.add(it) }
-            }
-            result += component
+    @Test fun everyParticleKindUsesTheCentreAndBothSidesWithNewBirthPositions() {
+        WeatherRenderer.Kind.entries.forEach { kind ->
+            val births = (0..1200).flatMap { tick -> WeatherRenderer.samples(tick / 10.0, 0.9, 2.0, kind) }
+                .distinctBy { it.id }
+            assertTrue("$kind has no central particles", births.any { it.x in 5.0..7.0 })
+            assertTrue(births.any { it.x < 4.0 })
+            assertTrue(births.any { it.x > 8.0 })
+            assertTrue(births.map { (it.x * 10).toInt() }.distinct().size > 25)
         }
-        return result
     }
 
-    @Test fun snowContainsOnlyCompleteSnowflakesAndHeavySnowHasMoreOfThem() {
-        val totals = listOf(WeatherCondition.SNOW, WeatherCondition.HEAVY_SNOW).map { condition ->
-            (0 until 1200).sumOf { tick ->
-                val frame = WeatherRenderer.render(condition, tick / 10.0)
-                assertTrue("$condition snowflakes touch the cloud at $tick", (0..12).all { frame[6 * 13 + it] == 0 })
-                val snow = lower(frame)
-                if (condition == WeatherCondition.HEAVY_SNOW) assertTrue("Heavy snow lost its density at $tick", snow.size >= 10)
-                components(snow).forEach { component ->
-                    assertTrue("$condition contains a rain-like particle at $tick", component.size >= 5)
-                    assertTrue("$condition lost its snowflake shape at $tick", component.any { p ->
-                        listOf(p - 1, p + 1, p - 13, p + 13).all { it in component }
-                    })
+    @Test fun particlesStartBehindTheCloudAndLeaveOnlyAfterTheEntireShapeExits() {
+        WeatherRenderer.Kind.entries.forEach { kind ->
+            val tracks = (0..1200).flatMap { tick ->
+                WeatherRenderer.samples(tick / 50.0, 1.2, 2.0, kind).map { it.id to it }
+            }.groupBy({ it.first }, { it.second })
+            val complete = tracks.values.filter { it.first().age < 0.04 && it.last().y > 15 }
+            assertTrue("$kind needs full trajectories", complete.size >= 10)
+            complete.forEach { track ->
+                assertTrue(track.first().y in 4.6..4.7)
+                assertTrue(track.last().y > 15)
+                track.zipWithNext().forEach { (a, b) ->
+                    assertTrue(b.y > a.y)
+                    assertTrue(abs(b.x - a.x) < 0.05)
                 }
-                snow.size
-            }
-        }
-        assertTrue("Heavy snowfall needs visibly more flakes", totals[1] > totals[0] * 1.3)
-    }
-
-    @Test fun sleetSnowflakesUseBothSidesAndTheCentreAndStayOnTheirFallTrajectory() {
-        val xPositions = (0 until 1200).flatMap { tick -> WeatherRenderer.snowflakes(tick / 10.0, 1, 1.0).map { it.x } }.toSet()
-        assertTrue(xPositions.any { it in 3..4 })
-        assertTrue(xPositions.any { it in 5..7 })
-        assertTrue(xPositions.any { it in 8..9 })
-        assertTrue(xPositions.size >= 5)
-        val early = WeatherRenderer.snowflakes(0.1, 1, 1.0).single()
-        val later = WeatherRenderer.snowflakes(2.1, 1, 1.0).single()
-        assertEquals(early.x, later.x)
-        assertTrue(later.y > early.y)
-    }
-
-    @Test fun hailIsAlwaysTwoSeparateIntactTwoByTwoCubesWithoutLightning() {
-        repeat(800) { tick ->
-            val cubes = components(lower(WeatherRenderer.render(WeatherCondition.HAIL, tick / 10.0), firstRow = 7))
-            assertEquals("Hail must not contain a bolt or rain at $tick", 2, cubes.size)
-            cubes.forEach { cube ->
-                assertEquals(4, cube.size)
-                assertEquals(2, cube.map { it % 13 }.distinct().size)
-                assertEquals(2, cube.map { it / 13 }.distinct().size)
             }
         }
     }
 
-    @Test fun everyCloudSceneHasSmallHorizontalMotionIncludingPrecipitation() {
-        val normal = listOf(WeatherCondition.DRIZZLE, WeatherCondition.FREEZING_DRIZZLE,
-            WeatherCondition.RAIN, WeatherCondition.SHOWERS, WeatherCondition.HEAVY_RAIN,
-            WeatherCondition.FREEZING_RAIN, WeatherCondition.SNOW_GRAINS,
-            WeatherCondition.THUNDERSTORM, WeatherCondition.HEAVY_THUNDERSTORM,
-            WeatherCondition.HAIL, WeatherCondition.THUNDERSTORM_HAIL)
-        val snow = listOf(WeatherCondition.SNOW, WeatherCondition.HEAVY_SNOW, WeatherCondition.SNOW_SHOWERS, WeatherCondition.SLEET)
-        val partly = listOf(WeatherCondition.PARTLY_CLOUDY_DAY, WeatherCondition.PARTLY_CLOUDY_NIGHT)
-        (normal + snow + partly + WeatherCondition.CLOUDY).forEach { condition ->
-            val row = when (condition) { in snow -> 1; in partly -> 6; else -> 2 }
-            fun crest(time: Double) = (0..12).last { x -> WeatherRenderer.render(condition, time)[row * 13 + x] > 0 }
-            val distance = crest(2.1) - crest(8.0)
-            assertEquals("$condition cloud must move by two cells across its cycle", if (condition == WeatherCondition.CLOUDY) -2 else 2, distance)
+    @Test fun snowHasSmallAndLargeFlakesAndHeavySnowIsDenser() {
+        val particles = WeatherRenderer.samples(20.0, 0.5, 1.6, WeatherRenderer.Kind.SNOW)
+        assertTrue(particles.any { it.large }); assertTrue(particles.any { !it.large })
+        fun density(condition: WeatherCondition) = (0..400).sumOf { tick ->
+            WeatherRenderer.render(condition, tick / 10.0).drop(7 * 13).count { it >= 45 }
         }
+        assertTrue(density(WeatherCondition.HEAVY_SNOW) > density(WeatherCondition.SNOW) * 1.2)
     }
 
-    @Test fun lightningUsesDifferentCompleteShapesAndOriginsWithQuietPauses() {
-        val strikes = (0..14).map { WeatherRenderer.strike(it * 6.0 + 0.2, false)!! }
-        assertTrue(strikes.map { it.x }.distinct().size >= 4)
-        assertEquals(3, strikes.map { it.variant }.distinct().size)
-        repeat(200) { i ->
-            val time = i * 6.0 + 0.2
-            val pixels = WeatherRenderer.render(WeatherCondition.THUNDERSTORM, time)
-            assertTrue(pixels.indices.count { it / 13 >= 7 && pixels[it] == 255 } >= 11)
-            assertEquals(0, lower(WeatherRenderer.render(WeatherCondition.THUNDERSTORM, time + 2)).count { it / 13 >= 7 })
+    @Test fun lightningGrowsAlongThreeSegmentsWithTwoCornersThenFades() {
+        val active = (0..12000).mapNotNull { tick -> WeatherRenderer.bolt(tick / 100.0)?.let { tick to it } }
+        assertTrue(active.any { it.second.growth in 0.1..0.8 })
+        assertTrue(active.any { it.second.growth == 1.0 })
+        assertTrue(active.any { it.second.level in 10.0..180.0 })
+        assertTrue(active.map { it.second.points }.distinct().size > 12)
+        active.forEach { (_, bolt) ->
+            assertEquals(4, bolt.points.size)
+            assertTrue(bolt.points.zipWithNext().all { (a,b) -> b.second > a.second })
         }
-        assertNull(WeatherRenderer.strike(3.0, false))
-        assertNotNull(WeatherRenderer.strike(1.2, true))
+        assertTrue((0..1200).count { WeatherRenderer.bolt(it / 10.0) == null } > 1000)
+    }
+
+    @Test fun celestialBodiesMoveOnBothAxesWhileStarsRemainInTheirOwnLayer() {
+        listOf(WeatherCondition.SUNNY, WeatherCondition.CLEAR_NIGHT, WeatherCondition.PARTLY_CLOUDY_DAY).forEach { condition ->
+            val base = WeatherRenderer.render(condition, 3.0)
+            assertFalse(base.contentEquals(WeatherRenderer.render(condition, 3.0, 1f, 0f)))
+            assertFalse(base.contentEquals(WeatherRenderer.render(condition, 3.0, 0f, 1f)))
+            assertFalse(base.contentEquals(WeatherRenderer.render(condition, 8.0)))
+        }
+        val a = WeatherRenderer.render(WeatherCondition.CLEAR_NIGHT, 4.0, -1f, -1f)
+        val b = WeatherRenderer.render(WeatherCondition.CLEAR_NIGHT, 4.0, 1f, 1f)
+        a.indices.filter { it % 13 <= 1 || it % 13 >= 11 || it / 13 >= 11 }.forEach { assertEquals(a[it], b[it]) }
+    }
+
+    @Test fun tinyTiltChangesDoNotTranslateAnEntireSceneByOnePixel() {
+        WeatherCondition.entries.forEach { condition ->
+            val a = WeatherRenderer.render(condition, 2.0, 0.499f, 0.499f)
+            val b = WeatherRenderer.render(condition, 2.0, 0.501f, 0.501f)
+            assertTrue("$condition has a rounding jump", a.indices.sumOf { abs(a[it]-b[it]) } < 160)
+        }
     }
 }

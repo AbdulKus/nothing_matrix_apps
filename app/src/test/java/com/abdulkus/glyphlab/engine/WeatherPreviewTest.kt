@@ -41,28 +41,37 @@ class WeatherPreviewTest {
     }
 
     @Test fun disablingTiltOrSettingZeroStrengthKeepsWeatherStillWhenPhoneMoves() {
-        val engine = MatrixEngine()
         val config = MatrixConfig(effect = EffectType.WEATHER, accelerometer = false, brightness = 1f)
-        val time = 3_000_000_000L
-        val baseline = engine.render(config, time, weather = WeatherCondition.RAIN)
-        assertArrayEquals(baseline, engine.render(config, time, 1f, -0.5f, WeatherCondition.RAIN))
-        assertArrayEquals(baseline, engine.render(config.copy(accelerometer = true, sensorStrength = 0f), time, 1f, -0.5f, WeatherCondition.RAIN))
-        val enabled = engine.render(config.copy(accelerometer = true, sensorStrength = 1f), time, 1f, -0.5f, WeatherCondition.RAIN)
-        assertFalse(baseline.contentEquals(enabled))
+        val baseline = MatrixEngine(); val disabled = MatrixEngine(); val zero = MatrixEngine(); val enabled = MatrixEngine()
+        var a = IntArray(169); var b = a
+        repeat(60) { tick ->
+            val time = 1_000_000_000L + tick * 20_000_000L
+            a = baseline.render(config, time, weather = WeatherCondition.RAIN)
+            assertArrayEquals(a, disabled.render(config, time, 1f, -0.5f, WeatherCondition.RAIN))
+            assertArrayEquals(a, zero.render(config.copy(accelerometer = true, sensorStrength = 0f), time, 1f, -0.5f, WeatherCondition.RAIN))
+            b = enabled.render(config.copy(accelerometer = true, sensorStrength = 1f), time, 1f, -0.5f, WeatherCondition.RAIN)
+        }
+        assertFalse(a.contentEquals(b))
     }
 
-    @Test fun tiltPreservesWholeHailstonesAndSnowflakesAndTheCircularMask() {
+    @Test fun appAndAodShareTheSamePreviewPhaseAndSpeedChangesDoNotJumpIt() {
+        WeatherPreview.show(WeatherCondition.RAIN, 1_000_000_000L)
+        val phase = WeatherPreview.timeSeconds(0.5f, 1_100_000_000L)
+        assertEquals(phase, WeatherPreview.timeSeconds(0.5f, 1_100_000_000L), 0.0)
+        assertEquals(0.3, WeatherPreview.timeSeconds(1f, 1_200_000_000L), 0.00001)
+        val config = MatrixConfig(effect = EffectType.WEATHER, accelerometer = false)
+        val a = MatrixEngine().render(config, 3_000_000_000L, weather = WeatherCondition.RAIN, weatherSecondsOverride = phase)
+        val b = MatrixEngine().render(config, 9_000_000_000L, weather = WeatherCondition.RAIN, weatherSecondsOverride = phase)
+        assertArrayEquals(a, b)
+    }
+
+    @Test fun extremeTiltPreservesBrightnessBoundsAndTheCircularMask() {
         listOf(-1f, 0f, 1f).forEach { tilt ->
             WeatherCondition.entries.forEach { condition -> repeat(360) { tick ->
                 val frame = WeatherRenderer.render(condition, tick / 10.0, tilt, -1f)
                 frame.forEachIndexed { i, v ->
                     assertTrue(v in 0..255)
                     if (!MatrixEngine.isInsideMatrix(i % 13, i / 13)) assertEquals(0, v)
-                }
-                if (condition == WeatherCondition.HAIL) assertEquals(8, frame.drop(7 * 13).count { it > 0 })
-                if (condition == WeatherCondition.SNOW || condition == WeatherCondition.HEAVY_SNOW) {
-                    assertEquals(0, frame.drop(7 * 13).count { it > 0 } % 5)
-                    assertTrue((0..12).all { frame[6 * 13 + it] == 0 })
                 }
             } }
         }

@@ -21,19 +21,24 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
     private var sandStepAccumulator = 0f
     private val stars = MutableList(34) { newStar() }
     private var lastNanos = 0L
+    private var weatherSeconds = 0.0
+    private val weatherTilt = TiltFilter(0.18)
 
     fun render(
         config: MatrixConfig,
         timeNanos: Long,
         tiltX: Float = 0f,
         tiltY: Float = 0f,
-        weather: com.abdulkus.glyphlab.weather.WeatherCondition = com.abdulkus.glyphlab.weather.WeatherCondition.UNKNOWN
+        weather: com.abdulkus.glyphlab.weather.WeatherCondition = com.abdulkus.glyphlab.weather.WeatherCondition.UNKNOWN,
+        weatherSecondsOverride: Double? = null
     ): IntArray {
         val time = timeNanos / 1_000_000_000.0
         val dt = if (lastNanos == 0L) 1f / config.frameRate else {
             ((timeNanos - lastNanos) / 1_000_000_000f).coerceIn(1f / 120f, 0.1f)
         }
+        val weatherDt = if (lastNanos == 0L) 0.0 else ((timeNanos - lastNanos) / 1e9).coerceIn(0.0, 0.1)
         lastNanos = timeNanos
+        if (config.effect == EffectType.WEATHER) weatherSeconds += weatherDt * config.speed * 2
 
         // The LEDs are observed from the back of the phone, so their horizontal
         // direction is mirrored relative to Android's screen coordinate system.
@@ -49,7 +54,11 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
             EffectType.PLASMA -> renderPlasma(config, time, sensorX, sensorY)
             EffectType.STARFIELD -> renderStarfield(config, dt, sensorX, sensorY)
             EffectType.CLOCK -> ClockRenderer.render(font = config.clockFont, layout = config.clockLayout)
-            EffectType.WEATHER -> WeatherRenderer.render(weather, time * config.speed * 2, sensorX, sensorY)
+            EffectType.WEATHER -> {
+                if (!config.accelerometer || config.sensorStrength == 0f) weatherTilt.reset()
+                val motion = weatherTilt.update(sensorX, sensorY, timeNanos)
+                WeatherRenderer.render(weather, weatherSecondsOverride ?: weatherSeconds, motion.x, motion.y)
+            }
         }
 
         val brightness = config.brightness.coerceIn(0f, 1f)

@@ -38,7 +38,7 @@ markup = '''<!doctype html>
 const matrixData = __DATA__;
 const rowWidths = [5,9,11,11,13,13,13,13,13,11,11,9,5];
 const samples=[];
-for (const [group, title] of [['weather','Погода · 13×13, 137 диодов'],['clocks','Шрифты · 12:34 / 20:58 / 09:16'],['layouts','Оформление · 12:34']]) {
+for (const [group, title] of [['weather','Погода · 13×13, 137 диодов'],['clocks','Шрифты · 12:34 / 20:58 / 09:16'],['layouts','Оформление · 12:34'],['transitions','Переходы из часов']]) {
   if(!matrixData[group]?.length) continue;
   const section=document.getElementById('matrix-sections');
   const heading=document.createElement('h3');heading.textContent=title;
@@ -66,7 +66,7 @@ timeline.oninput=()=>{paused=true;tick=Number(timeline.value);label();draw();};
 function draw(){
  timeline.value=String(tick%360);seconds.textContent=`${((tick%360)/10).toFixed(1)} с`;
  for(const {canvas,group,frames} of samples){
-  const f=frames[(group==='weather'?tick:Math.floor(tick/25))%frames.length];
+  const f=frames[(group==='weather'||group==='transitions'?tick:Math.floor(tick/25))%frames.length];
   const ctx=canvas.getContext('2d');ctx.clearRect(0,0,156,156);
   for(let y=0;y<13;y++)for(let x=0;x<13;x++){
    if(Math.abs(x-6)>(rowWidths[y]-1)/2)continue;
@@ -80,6 +80,9 @@ draw();setInterval(()=>{if(!paused){tick++;draw();}},100);
 </script></body></html>'''
 (OUTPUT / 'matrix-review.html').write_text(markup.replace('__DATA__', json.dumps(packed, ensure_ascii=False, separators=(',', ':'))))
 (OUTPUT / 'weather-review.html').write_text(markup.replace('__DATA__', json.dumps({'weather':packed['weather']}, ensure_ascii=False, separators=(',', ':'))))
+if 'transitions' in packed:
+    (OUTPUT / 'weather-and-transitions-review.html').write_text(markup.replace('__DATA__', json.dumps({'weather':packed['weather'],'transitions':packed['transitions']}, ensure_ascii=False, separators=(',', ':'))))
+    (OUTPUT / 'transitions-review.html').write_text(markup.replace('__DATA__', json.dumps({'transitions':packed['transitions']}, ensure_ascii=False, separators=(',', ':'))))
 if 'tilt' in packed:
     tilt_page = markup.replace('__DATA__', json.dumps({'weather':packed['tilt']}, ensure_ascii=False, separators=(',', ':')))
     tilt_page = tilt_page.replace('minmax(112px,1fr)', 'minmax(200px,1fr)').replace('</style>', '#matrix-review .review-controls {display:none}</style>')

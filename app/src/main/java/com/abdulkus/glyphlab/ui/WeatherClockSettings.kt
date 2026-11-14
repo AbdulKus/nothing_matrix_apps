@@ -108,10 +108,11 @@ private fun WeatherGallery(language: AppLanguage, onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         title = { Text(language.t("weather_gallery").replace("{count}", WeatherCondition.entries.size.toString()), fontSize = 17.sp) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.heightIn(max = 550.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 PixelMatrix(preview.frame, Modifier.size(174.dp))
                 Text(if (language == AppLanguage.RU) selected.ru else selected.en, color = Ink, modifier = Modifier.padding(8.dp))
                 Text(language.t("weather_preview_hint"), color = Dim, fontSize = 11.sp, textAlign = TextAlign.Center)
+                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
                 WeatherCondition.entries.chunked(2).forEach { row ->
                     Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         row.forEach { condition ->
@@ -123,6 +124,7 @@ private fun WeatherGallery(language: AppLanguage, onDismiss: () -> Unit) {
                         }
                         if (row.size == 1) Spacer(Modifier.weight(1f))
                     }
+                }
                 }
             }
         },
@@ -158,6 +160,17 @@ fun ClockSettings(language: AppLanguage, config: MatrixConfig, onChange: (Matrix
                 }
             }
         }
+        Text(language.t("clock_transition"), color = Dim, fontSize = 11.sp)
+        ClockTransition.entries.chunked(2).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEach { style ->
+                    OutlinedButton(onClick = { onChange(config.copy(clockTransition = style)) }, modifier = Modifier.weight(1f)) {
+                        Text((if (config.clockTransition == style) "✓ " else "") + if (language == AppLanguage.RU) style.ru else style.en, fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+        ClockTransitionPreview(config)
         Text(language.t("clock_sleep_style"), color = Dim, fontSize = 11.sp)
     }
 }
@@ -174,4 +187,20 @@ fun PixelMatrix(frame: IntArray, modifier: Modifier = Modifier) {
             }
         }
     }
+}
+
+@Composable
+private fun ClockTransitionPreview(config: MatrixConfig) {
+    var elapsed by remember { mutableDoubleStateOf(0.0) }
+    LaunchedEffect(config.clockTransition) {
+        val start = System.nanoTime()
+        while (true) { elapsed = (System.nanoTime() - start) / 1e9; delay(33) }
+    }
+    val phase = elapsed % 3.5
+    val selected = if (config.clockTransition == ClockTransition.RANDOM)
+        ClockTransitionRenderer.STYLES[(elapsed / 3.5).toInt() % ClockTransitionRenderer.STYLES.size] else config.clockTransition
+    val clock = ClockRenderer.render(font = config.clockFont, layout = config.clockLayout)
+    val destination = WeatherRenderer.render(WeatherCondition.RAIN, elapsed)
+    val frame = ClockTransitionRenderer.compose(clock, destination, selected, ((phase - 0.7) / 0.95).coerceIn(0.0, 1.0), WeatherRenderer.render(WeatherCondition.RAIN, elapsed - phase))
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { PixelMatrix(frame, Modifier.size(110.dp)) }
 }

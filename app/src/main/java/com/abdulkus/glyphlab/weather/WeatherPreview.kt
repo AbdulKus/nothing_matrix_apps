@@ -15,14 +15,24 @@ data class WeatherPreviewState(
 object WeatherPreview {
     private val session = MutableStateFlow(WeatherPreviewState())
     val state = session.asStateFlow()
+    private var lastNanos = 0L
+    private var seconds = 0.0
 
-    fun show(condition: WeatherCondition) {
+    @Synchronized fun show(condition: WeatherCondition, nowNanos: Long = System.nanoTime()) {
+        if (session.value.condition != condition) { lastNanos = nowNanos; seconds = 0.0 }
         session.update {
             if (it.condition == condition) it
             else WeatherPreviewState(condition, WeatherRenderer.render(condition, 0.0))
         }
     }
-    fun clear() { session.value = WeatherPreviewState() }
+    @Synchronized fun clear() { session.value = WeatherPreviewState(); lastNanos = 0; seconds = 0.0 }
+    @Synchronized fun timeSeconds(speed: Float, nowNanos: Long = System.nanoTime()): Double {
+        if (session.value.condition == null) return 0.0
+        val elapsed = ((nowNanos - lastNanos) / 1e9).coerceIn(0.0, 0.1)
+        seconds += elapsed * speed * 2
+        lastNanos = maxOf(lastNanos, nowNanos)
+        return seconds
+    }
     fun publish(condition: WeatherCondition, frame: IntArray) {
         // Drop an old render that completes after the user selects another scene or closes.
         session.update { if (it.condition == condition) it.copy(frame = frame) else it }

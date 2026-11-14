@@ -11,6 +11,8 @@ import com.abdulkus.glyphlab.data.AutoBrightnessSource
 import com.abdulkus.glyphlab.data.ConfigStore
 import com.abdulkus.glyphlab.data.EffectType
 import com.abdulkus.glyphlab.data.MatrixConfig
+import com.abdulkus.glyphlab.engine.ClockTransitionRenderer
+import com.abdulkus.glyphlab.engine.TiltFilter
 import com.abdulkus.glyphlab.engine.FramePacer
 import com.abdulkus.glyphlab.weather.WeatherPreview
 import com.abdulkus.glyphlab.weather.WeatherCondition
@@ -25,7 +27,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -52,6 +53,7 @@ class GlyphRuntime(context: Context) : SensorEventListener {
         brightnessWake.trySend(Unit)
     }
     private val weather = WeatherRepository.get(appContext)
+    private val motionFilter = TiltFilter()
     private val engine = MatrixEngine()
     private val clockFrames = MinuteClockFrameCache()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -70,7 +72,7 @@ class GlyphRuntime(context: Context) : SensorEventListener {
     @Volatile private var lastReliableLux: Float? = cachedAmbientLux
     private var manager: GlyphMatrixManager? = null
     private var loop: Job? = null
-    private var lastClockHardwareFrame: IntArray? = null
+    @Volatile private var lastClockHardwareFrame: IntArray? = null
 
     private val callback = object : GlyphMatrixManager.Callback {
         override fun onServiceConnected(componentName: ComponentName?) {
@@ -86,6 +88,7 @@ class GlyphRuntime(context: Context) : SensorEventListener {
     }
 
     fun start(initialConfig: MatrixConfig) {
+        motionFilter.reset()
         config = initialConfig
         if (motionSensor != null) {
             sensorManager.registerListener(this, motionSensor, SensorManager.SENSOR_DELAY_GAME)
@@ -107,17 +110,27 @@ class GlyphRuntime(context: Context) : SensorEventListener {
             loop = scope.launch {
                 val pacer = FramePacer()
                 var previewWasActive = false
+                var previousClock = false
+                var displayed = IntArray(169)
+                val transition = ClockTransitionRenderer()
                 while (isActive) {
                     val preview = WeatherPreview.state.value.condition
                     val current = if (preview == null) config else config.copy(effect = EffectType.WEATHER)
                     val clockVisible = current.effect == EffectType.CLOCK
                     if (!clockVisible) lastClockHardwareFrame = null
-                    val next = if (clockVisible) {
+                    val nextRaw = if (clockVisible) {
                         clockFrames.frame(masterBrightness = current.brightness, font = current.clockFont, layout = current.clockLayout)
                     } else {
                         if (current.effect == EffectType.WEATHER && preview == null) weather.refreshIfNeeded()
-                        engine.render(current, System.nanoTime(), tiltX, tiltY, preview ?: weather.state.value.snapshot?.currentCondition() ?: WeatherCondition.UNKNOWN)
+                        engine.render(current, System.nanoTime(), tiltX, tiltY, preview ?: weather.state.value.snapshot?.currentCondition() ?: WeatherCondition.UNKNOWN,
+                            weatherSecondsOverride = preview?.let { WeatherPreview.timeSeconds(current.speed) })
                     }
+                    val now = System.nanoTime()
+                    if (previousClock && !clockVisible) transition.start(displayed, current.clockTransition, now)
+                    else if (clockVisible) transition.cancel()
+                    val next = transition.frame(nextRaw, now)
+                    previousClock = clockVisible
+                    displayed = next
                     _frame.value = next
                     if (preview != null) WeatherPreview.publish(preview, next)
                     if (previewWasActive && preview == null && !outputEnabled) {
@@ -149,7 +162,7 @@ class GlyphRuntime(context: Context) : SensorEventListener {
                         }
                         withTimeoutOrNull(waitMillis) { brightnessWake.receive() }
                     } else {
-                        delay(pacer.delayMillis(current.frameRate))
+                        withTimeoutOrNull(pacer.delayMillis(current.frameRate)) { brightnessWake.receive() }
                     }
                 }
             }
@@ -194,13 +207,13 @@ class GlyphRuntime(context: Context) : SensorEventListener {
         if (event.sensor.type != motionSensor?.type) return
         motionOrientationKnown = true
         screenFacesDown = event.values[2] < -SensorManager.GRAVITY_EARTH * 0.25f
-        val alpha = 0.16f
-        val isGravityVector = event.sensor.type == Sensor.TYPE_GRAVITY
-        val direction = if (isGravityVector) -1f else 1f
-        val x = (event.values[0] / SensorManager.GRAVITY_EARTH * direction).coerceIn(-1f, 1f)
-        val y = (event.values[1] / SensorManager.GRAVITY_EARTH * direction).coerceIn(-1f, 1f)
-        tiltX += alpha * (x - tiltX)
-        tiltY += alpha * (y - tiltY)
+        val motion = motionFilter.update(
+            event.values[0] / SensorManager.GRAVITY_EARTH,
+            event.values[1] / SensorManager.GRAVITY_EARTH,
+            event.timestamp
+        )
+        tiltX = motion.x
+        tiltY = motion.y
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit

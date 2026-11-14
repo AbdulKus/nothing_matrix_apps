@@ -43,5 +43,6 @@ data class MatrixConfig(
     val sleepClockEnabled: Boolean = false,
     val clockLockScreenOnly: Boolean = false,
     val clockFont: ClockFont = ClockFont.CLASSIC,
-    val clockLayout: ClockLayout = ClockLayout.STACKED
+    val clockLayout: ClockLayout = ClockLayout.STACKED,
+    val clockTransition: ClockTransition = ClockTransition.RANDOM
 )

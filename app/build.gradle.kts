@@ -24,8 +24,8 @@ android {
         applicationId = "com.abdulkus.glyphlab"
         minSdk = 34
         targetSdk = 36
-        versionCode = 21
-        versionName = "0.5.1"
+        versionCode = 22
+        versionName = "0.6.0"
         buildConfigField("String", "GIT_SHA", "\"$buildGitSha\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

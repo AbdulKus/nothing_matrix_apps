@@ -22,6 +22,8 @@ import com.abdulkus.glyphlab.data.AutoBrightnessSource
 import com.abdulkus.glyphlab.data.EffectType
 import com.abdulkus.glyphlab.data.ConfigStore
 import com.abdulkus.glyphlab.data.MatrixConfig
+import com.abdulkus.glyphlab.engine.ClockTransitionRenderer
+import com.abdulkus.glyphlab.engine.TiltFilter
 import com.abdulkus.glyphlab.engine.FramePacer
 import com.abdulkus.glyphlab.weather.WeatherPreview
 import com.abdulkus.glyphlab.weather.WeatherCondition
@@ -37,7 +39,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -45,7 +46,11 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 class MatrixToyService : Service(), SensorEventListener {
     private val weather by lazy { WeatherRepository.get(this) }
+    private val motionFilter = TiltFilter()
     private val engine = MatrixEngine()
+    private val transition = ClockTransitionRenderer()
+    private var previousMode: MatrixOutputMode? = null
+    private var lastDisplayedFrame = IntArray(169)
     private val clockFrames = MinuteClockFrameCache()
     private val brightnessWake = Channel<Unit>(Channel.CONFLATED)
     private var scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -62,12 +67,12 @@ class MatrixToyService : Service(), SensorEventListener {
     private var lightSensorRegistered = false
     private var screenReceiverRegistered = false
     private var config = MatrixConfig()
-    private var tiltX = 0f
-    private var tiltY = 0f
+    @Volatile private var tiltX = 0f
+    @Volatile private var tiltY = 0f
     private var motionOrientationKnown = false
     private var screenFacesDown = false
     private var lastReliableLux: Float? = null
-    private var lastClockHardwareFrame: IntArray? = null
+    @Volatile private var lastClockHardwareFrame: IntArray? = null
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -114,6 +119,7 @@ class MatrixToyService : Service(), SensorEventListener {
                             ]
                         )
                         configStore.save(config)
+                        brightnessWake.trySend(Unit)
                     }
                 }
             } else {
@@ -126,6 +132,8 @@ class MatrixToyService : Service(), SensorEventListener {
     private val callback = object : GlyphMatrixManager.Callback {
         override fun onServiceConnected(componentName: ComponentName?) {
             manager?.register(Glyph.DEVICE_25111p)
+            lastClockHardwareFrame = null
+            brightnessWake.trySend(Unit)
             ensureRenderLoop()
         }
 
@@ -151,6 +159,11 @@ class MatrixToyService : Service(), SensorEventListener {
 
     override fun onBind(intent: Intent?): IBinder {
         config = configStore.load()
+        motionFilter.reset()
+        tiltX = 0f
+        tiltY = 0f
+        previousMode = null
+        transition.cancel()
         val cachedLux = configStore.loadRecentAmbientLux()
         ambientBrightness = AutomaticBrightnessController(
             cachedLux?.let { AutomaticBrightnessController.targetScaleForLux(it) } ?: 1f
@@ -218,7 +231,13 @@ class MatrixToyService : Service(), SensorEventListener {
                 val outputMode = outputMode(current)
                 val lowPowerOutput = outputMode != MatrixOutputMode.EFFECT
                 if (!lowPowerOutput) lastClockHardwareFrame = null
-                val frame = frameForCurrentState(current, outputMode)
+                val now = System.nanoTime()
+                if (previousMode == MatrixOutputMode.CLOCK && outputMode == MatrixOutputMode.EFFECT) {
+                    transition.start(lastDisplayedFrame, current.clockTransition, now)
+                } else if (outputMode != MatrixOutputMode.EFFECT) transition.cancel()
+                val frame = transition.frame(frameForCurrentState(current, outputMode), now)
+                previousMode = outputMode
+                lastDisplayedFrame = frame
                 val automatic = automaticScale(current)
                 val hardwareFrame = HardwareFrameMapper.forGlyphToy(
                     frame,
@@ -241,25 +260,16 @@ class MatrixToyService : Service(), SensorEventListener {
                     }
                     withTimeoutOrNull(waitMillis) { brightnessWake.receive() }
                 } else {
-                    delay(pacer.delayMillis(current.frameRate))
+                    withTimeoutOrNull(pacer.delayMillis(current.frameRate)) { brightnessWake.receive() }
                 }
             }
         }
     }
 
     private fun renderSingleFrame() {
-        config = configStore.load()
-        val frame = frameForCurrentState(config, outputMode(config))
-        runCatching {
-            manager?.setMatrixFrame(
-                HardwareFrameMapper.forGlyphToy(
-                    frame,
-                    config.brightness,
-                    automaticScale(config),
-                    config.minimumBrightness
-                )
-            )
-        }
+        // Rendering has one owner. Wake it immediately instead of writing one frame
+        // on the main thread while the animation loop is still in a one-second clock wait.
+        brightnessWake.trySend(Unit)
     }
 
     private fun automaticScale(current: MatrixConfig): Float {
@@ -290,8 +300,9 @@ class MatrixToyService : Service(), SensorEventListener {
             if (current.effect == EffectType.WEATHER && preview == null) weather.refreshIfNeeded()
             val effective = if (preview == null) current else current.copy(effect = EffectType.WEATHER)
             engine.render(effective, System.nanoTime(), tiltX, tiltY,
-                preview ?: weather.state.value.snapshot?.currentCondition() ?: WeatherCondition.UNKNOWN).also {
-                if (preview != null) WeatherPreview.publish(preview, it)
+                preview ?: weather.state.value.snapshot?.currentCondition() ?: WeatherCondition.UNKNOWN,
+                weatherSecondsOverride = preview?.let { WeatherPreview.timeSeconds(current.speed) }).also {
+                if (preview != null && !powerManager.isInteractive) WeatherPreview.publish(preview, it)
             }
         }
     }
@@ -349,13 +360,13 @@ class MatrixToyService : Service(), SensorEventListener {
         if (event.sensor.type != motionSensor?.type) return
         motionOrientationKnown = true
         screenFacesDown = event.values[2] < -SensorManager.GRAVITY_EARTH * 0.25f
-        val alpha = 0.13f
-        val isGravityVector = event.sensor.type == Sensor.TYPE_GRAVITY
-        val direction = if (isGravityVector) -1f else 1f
-        val x = (event.values[0] / SensorManager.GRAVITY_EARTH * direction).coerceIn(-1f, 1f)
-        val y = (event.values[1] / SensorManager.GRAVITY_EARTH * direction).coerceIn(-1f, 1f)
-        tiltX += alpha * (x - tiltX)
-        tiltY += alpha * (y - tiltY)
+        val motion = motionFilter.update(
+            event.values[0] / SensorManager.GRAVITY_EARTH,
+            event.values[1] / SensorManager.GRAVITY_EARTH,
+            event.timestamp
+        )
+        tiltX = motion.x
+        tiltY = motion.y
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit

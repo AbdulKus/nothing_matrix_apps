@@ -45,7 +45,7 @@ class WeatherClockTest {
             val frames = (0..360).map { WeatherRenderer.render(condition, it / 10.0) }
             frames.forEach { frame ->
                 assertEquals(169, frame.size)
-                assertTrue("$condition needs a sparse silhouette", frame.count { it > 0 } in 7..65)
+                assertTrue("$condition needs a sparse silhouette", frame.count { it >= 45 } in 5..85)
                 frame.forEachIndexed { i, value ->
                     assertTrue(value in 0..255)
                     if (!MatrixEngine.isInsideMatrix(i % 13, i / 13)) assertEquals(0, value)
@@ -97,6 +97,13 @@ class WeatherClockTest {
                 "{\"name\":\"${condition.ru} · ${if (tilt < 0) "влево" else if (tilt > 0) "вправо" else "без наклона"}\",\"frames\":[${frameJson(WeatherRenderer.render(condition, 2.0, tilt))}]}"
             }
         }.joinToString(",")
-        File("build/reports/matrix-review/frames.json").apply { parentFile?.mkdirs(); writeText("{\"weather\":[$weather],\"clocks\":[$clocks],\"layouts\":[$layouts],\"tilt\":[$tilted]}") }
+        val transitions = ClockTransitionRenderer.STYLES.joinToString(",") { style ->
+            val clock = ClockRenderer.renderTime(12, 34, ClockFont.CLASSIC, ClockLayout.STACKED)
+            "{\"name\":\"${style.ru}\",\"frames\":[" + (0 until 36).joinToString(",") { tick ->
+                val p = ((tick / 10.0 - 0.7) / 0.95).coerceIn(0.0,1.0)
+                frameJson(ClockTransitionRenderer.compose(clock, WeatherRenderer.render(WeatherCondition.RAIN, tick / 10.0), style, p, WeatherRenderer.render(WeatherCondition.RAIN, 0.0)))
+            } + "]}"
+        }
+        File("build/reports/matrix-review/frames.json").apply { parentFile?.mkdirs(); writeText("{\"weather\":[$weather],\"clocks\":[$clocks],\"layouts\":[$layouts],\"tilt\":[$tilted],\"transitions\":[$transitions]}") }
     }
 }
