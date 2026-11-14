@@ -3,7 +3,6 @@ package com.abdulkus.glyphlab.engine
 import com.abdulkus.glyphlab.weather.WeatherCondition
 import org.junit.Assert.*
 import org.junit.Test
-import kotlin.math.abs
 
 class WeatherRefinementTest {
     @Test fun cloudyMoonUsesTheSecondCustomerBitmapExactly() {
@@ -49,15 +48,75 @@ class WeatherRefinementTest {
         assertEquals(-2.0,WeatherRenderer.displacement(-1.0),0.0)
     }
 
-    @Test fun sunRaysAreEightPointsAndRotationReversesSlowly() {
-        val rotation=(0..600).map { WeatherRenderer.sunRotation(it.toDouble()) }
-        val deltas=rotation.zipWithNext { a,b -> b-a }
-        assertTrue(deltas.any { it>0.001 }); assertTrue(deltas.any { it< -0.001 })
-        assertTrue(deltas.all { abs(it)<0.12 })
-        repeat(300) { tick ->
-            val frame=WeatherRenderer.render(WeatherCondition.SUNNY,tick/10.0)
-            assertTrue(frame.count { it==230 } in 7..8)
+    @Test fun sunMatchesReferenceAndOnlyMovesRaysOnePixelOutward() {
+        val reference = listOf(0 to -4, 3 to -3, 4 to 0, 3 to 3, 0 to 4, -3 to 3, -4 to 0, -3 to -3)
+        assertEquals(reference, WeatherRenderer.sunRayOffsets(0.0, true))
+        val baseline = WeatherRenderer.render(WeatherCondition.SUNNY, 0.0)
+        assertEquals(reference.map { (x, y) -> (y + 6) * 13 + x + 6 }.toSet(),
+            baseline.indices.filter { baseline[it] == 230 }.toSet())
+        val small = listOf(0 to -3, 2 to -2, 3 to 0, 2 to 2, 0 to 3, -2 to 2, -3 to 0, -2 to -2)
+        val counts = mutableSetOf<Int>()
+        repeat(9000) { tick ->
+            val t = tick / 50.0
+            assertEquals(small, WeatherRenderer.sunRayOffsets(t, false))
+            val rays = WeatherRenderer.sunRayOffsets(t, true)
+            assertEquals(8, rays.toSet().size)
+            var moved = 0
+            rays.zip(reference).forEach { (ray, base) ->
+                if (ray != base) {
+                    moved++
+                    assertEquals(base.first + base.first.compareTo(0), ray.first)
+                    assertEquals(base.second + base.second.compareTo(0), ray.second)
+                }
+            }
+            assertTrue(moved in 0..2)
+            counts += moved
         }
+        assertEquals(setOf(0, 1, 2), counts)
+    }
+
+    @Test fun snowEmergesExactlyTwoRowsEarlierAsACompleteCross() {
+        for (condition in listOf(WeatherCondition.SNOW, WeatherCondition.HEAVY_SNOW, WeatherCondition.SLEET, WeatherCondition.SNOW_SHOWERS)) {
+            var found = false
+            repeat(1000) { tick ->
+                val t = tick / 25.0
+                val frame = WeatherRenderer.render(condition, t)
+                val cloudTop = WeatherRenderer.cloudPose(t, 0.0).second.toInt()
+                // Previously the first possible snow centre was cloudTop + 6.
+                for (x in 2..10) {
+                    val y = cloudTop + 4
+                    if (frame[y * 13 + x] == 250) {
+                        found = true
+                        listOf(-1 to 0, 1 to 0, 0 to -1, 0 to 1).forEach { (dx, dy) ->
+                            assertTrue(frame[(y + dy) * 13 + x + dx] >= 170)
+                        }
+                    }
+                }
+            }
+            assertTrue("$condition never emerges at the raised position", found)
+        }
+    }
+
+    @Test fun windGustsTravelWithFadingTailsAtDifferentHeightsOneOrTwoAtATime() {
+        val snapshots = (0..6000).map { WeatherRenderer.windGusts(it / 50.0) }
+        val counts = snapshots.map { it.size }.toSet()
+        assertTrue(1 in counts && 2 in counts)
+        assertTrue(counts.all { it <= 2 })
+        val tracks = snapshots.flatten().groupBy { it.id }.values
+            .filter { it.first().age < 0.1 && it.last().age > 5.3 }
+        assertTrue(tracks.map { it.first().y.toInt() }.toSet().size >= 2)
+        tracks.forEach { track ->
+            assertTrue(track.any { it.opacity in 0.1..0.8 })
+            track.zipWithNext().forEach { (a, b) -> assertTrue(b.x > a.x) }
+            assertTrue(track.last().opacity < 0.1)
+        }
+        val cloudPositions = (0..300).map { tick ->
+            val frame = WeatherRenderer.render(WeatherCondition.WIND, tick / 20.0)
+            frame.indices.filter { it / 13 <= 3 && frame[it] == 190 }.toSet()
+        }
+        assertTrue(cloudPositions.count { it.isNotEmpty() } > 100)
+        val centres = cloudPositions.filter { it.isNotEmpty() }.map { sites -> sites.map { it % 13 }.average() }
+        assertTrue(centres.max() - centres.min() > 6)
     }
 
     @Test fun heavyRainFillsMoreColumnsAndHasMoreDrops() {

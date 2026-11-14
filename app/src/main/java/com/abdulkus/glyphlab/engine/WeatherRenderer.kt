@@ -48,6 +48,8 @@ object WeatherRenderer {
             WeatherCondition.UNKNOWN -> c.stamp(4.0, 4.0, listOf(".###.", "#...#", "...#.", "..#..", ".....", "..#.."), 150)
             else -> {
                 val frozen = condition == WeatherCondition.FREEZING_DRIZZLE || condition == WeatherCondition.FREEZING_RAIN
+                val storm = condition in setOf(WeatherCondition.THUNDERSTORM, WeatherCondition.HEAVY_THUNDERSTORM, WeatherCondition.THUNDERSTORM_HAIL)
+                cloud(c, cloudX, cloudY, if (storm) 155 else 225)
                 c.clipTop = cloudY.toInt() + 5
                 c.clipBottom = if (frozen) 10 else 12
                 when (condition) {
@@ -70,8 +72,6 @@ object WeatherRenderer {
                 }
                 c.clipTop = 0; c.clipBottom = 12
                 if (frozen) ice(c)
-                val storm = condition in setOf(WeatherCondition.THUNDERSTORM, WeatherCondition.HEAVY_THUNDERSTORM, WeatherCondition.THUNDERSTORM_HAIL)
-                cloud(c, cloudX, cloudY, if (storm) 155 else 225)
                 if (storm) lightning(c, t, condition == WeatherCondition.HEAVY_THUNDERSTORM, tx * 0.5, ty * 0.25)
             }
         }
@@ -102,6 +102,9 @@ object WeatherRenderer {
     }
 
     private fun particles(c: Canvas, t: Double, interval: Double, speed: Double, kind: Kind, tx: Double, ty: Double, showers: Boolean = false) {
+        val originalTop = c.clipTop
+        // Snow emerges two rows higher, in front of the cloud's lower edge.
+        if (kind == Kind.SNOW) c.clipTop -= 2
         samples(t, interval, speed, kind, tx).forEach { p ->
             // Vary emission density at birth. Existing particles always finish their flight.
             if (showers && sin((t - p.age) * 0.7) < -0.3 && random(p.id, 89) < 0.65) return@forEach
@@ -122,6 +125,7 @@ object WeatherRenderer {
                 Kind.GRAIN -> { c.dot(x, y, 210.0); c.dot(x + 0.6, y - 0.6, 120.0) }
             }
         }
+        c.clipTop = originalTop
     }
 
     internal data class Bolt(val points: List<Pair<Double, Double>>, val growth: Double, val level: Double)
@@ -164,10 +168,8 @@ object WeatherRenderer {
     private fun sun(c: Canvas, x: Double, y: Double, t: Double, tx: Double, ty: Double, large: Boolean) {
         val cx = (x + sin(t * 0.55) * 0.65 + tx).roundToInt().toDouble()
         val cy = (y + sin(t * 0.43 + 0.7) * 0.65 + ty).roundToInt().toDouble()
-        val radius = if (large) 4.0 else 3.0
-        repeat(8) { i ->
-            val a = i * PI / 4 + sunRotation(t)
-            c.dot(cx + cos(a) * radius, cy + sin(a) * radius, 230.0)
+        sunRayOffsets(t, large).forEach { (dx, dy) ->
+            c.dot(cx + dx, cy + dy, 230.0)
         }
         // Full, fixed pixel alphabet on its own layer, including the arc behind the cloud.
         val body = if (large) listOf(".###.", "#...#", "#...#", "#...#", ".###.")
@@ -235,37 +237,70 @@ object WeatherRenderer {
         return x.toDouble() to y.toDouble()
     }
 
-    internal fun sunRotation(t: Double): Double {
-        val segment = floor(t / 18).toLong()
-        val u = (t / 18 - segment).let { it * it * (3 - 2 * it) }
-        return (random(segment, 317) - 0.5) * 1.4 * (1-u) + (random(segment+1, 317) - 0.5) * 1.4 * u
+    /** Fixed eight-ray alphabet from the reference; only radial one-pixel extensions animate. */
+    internal fun sunRayOffsets(t: Double, large: Boolean): List<Pair<Int, Int>> {
+        val cardinal = if (large) 4 else 3
+        val diagonal = if (large) 3 else 2
+        val base = listOf(0 to -cardinal, diagonal to -diagonal, cardinal to 0,
+            diagonal to diagonal, 0 to cardinal, -diagonal to diagonal, -cardinal to 0, -diagonal to -diagonal)
+        if (!large) return base
+
+        val cycle = floor(t / 9).toLong()
+        val age = t - cycle * 9 - (0.8 + random(cycle, 317) * 1.2)
+        val duration = 2.4 + random(cycle, 319) * 2.0
+        if (age < 0 || age >= duration) return base
+        val direction = if (random(cycle, 321) < 0.5) 1 else -1
+        val first = (random(cycle, 323) * 8).toInt()
+        val step = floor(age / (0.13 + random(cycle, 325) * 0.05)).toInt()
+        val active = Math.floorMod(first + direction * step, 8)
+        val second = age > 0.8 && age < duration - 0.7 && random(cycle, 327) > 0.25
+        return base.mapIndexed { i, (dx, dy) ->
+            if (i == active || (second && i == (active + 4) % 8))
+                (dx + dx.sign) to (dy + dy.sign)
+            else dx to dy
+        }
+    }
+
+    internal data class WindGust(val id: Long, val x: Double, val y: Double, val age: Double, val opacity: Double)
+
+    /** Independent short gusts; neither a permanent wave nor a persistent full-screen trail. */
+    internal fun windGusts(t: Double): List<WindGust> {
+        val current = floor(t / 7).toLong()
+        return (current - 1..current + 1).flatMap { cycle ->
+            (0..1).mapNotNull { stream ->
+                if (stream == 1 && random(cycle, 353) < 0.3) return@mapNotNull null
+                val birth = cycle * 7 - 1.0 + random(cycle, 347) * 0.4 + stream * (1.2 + random(cycle, 349) * 0.5)
+                val age = t - birth
+                if (age !in 0.0..5.4) return@mapNotNull null
+                val opacity = min(age / 0.35, (5.4 - age) / 2.6).coerceIn(0.0, 1.0)
+                val y = if (stream == 0) 5.2 + random(cycle, 359) * 0.6 else 9.0 + random(cycle, 367) * 0.3
+                WindGust(cycle * 2 + stream, -5 + age * 4.4, y, age, opacity)
+            }
+        }
     }
 
     private fun wind(c: Canvas, t: Double, tx: Double, ty: Double) {
-        val phase = t % 12
-        val curl = phase in 2.0..9.5
-        val cx = -4 + phase * 2.2
-        val cy = 6 + sin(t * 0.4) * 0.4
-        repeat(3) { wave ->
-            var previous: Pair<Double,Double>? = null
-            for (step in -2..54) {
-                val x = step / 4.0
-                if (wave==1 && curl && abs(x-cx)<2.5) { previous=null; continue }
-                val y = 3.0 + wave * 3 + sin(x * 0.6 - t * 1.25 + wave * 0.7) * 0.85 + ty * 0.3
-                val p = (x + tx * 0.4) to y
-                previous?.let { c.line(it.first,it.second,p.first,p.second,if(wave==1) 210.0 else 145.0) }
-                previous=p
+        windGusts(t).forEach { gust ->
+            val cx = (gust.x + tx * 0.4).roundToInt().toDouble()
+            val cy = (gust.y + ty * 0.3).roundToInt().toDouble()
+            // One whole-pixel curl, with a hole that stays open during translation.
+            // A tightly sampled shrinking spiral would fill that hole at this resolution.
+            repeat(5) { i -> c.dot(cx - 6 + i, cy, (25 + i * 30.0) * gust.opacity) }
+            val path = listOf(-2 to 0, -2 to -1, -1 to -2, 0 to -2, 1 to -2,
+                2 to -1, 2 to 0, 1 to 1, 0 to 1, 0 to 0)
+            path.forEachIndexed { i, (dx, dy) ->
+                c.dot(cx + dx, cy + dy, (145 + i * 9.0) * gust.opacity)
             }
         }
-        if(curl) {
-            var previous: Pair<Double,Double>? = null
-            repeat(41) { i ->
-                val a = PI + i * PI * 2 / 40
-                val r = 2.25 - i / 40.0 * 1.9
-                val p = (cx+cos(a)*r) to (cy+sin(a)*r)
-                previous?.let { c.line(it.first,it.second,p.first,p.second,220.0) }
-                previous=p
-            }
+        // Small foreground clouds cross the upper part of the screen with the wind.
+        val current = floor(t / 6).toLong()
+        for (id in current - 2..current) {
+            val age = t - (id * 6 + random(id, 373) * 0.7)
+            if (age < 0) continue
+            val x = -7 + age * (2.4 + random(id, 379) * 0.4) + tx * 0.4
+            if (x > 14) continue
+            val y = 1.0 + random(id, 383)
+            c.stamp(x, y, listOf("..##..", ".#..#.", "######"), 190, opaque = true)
         }
     }
 

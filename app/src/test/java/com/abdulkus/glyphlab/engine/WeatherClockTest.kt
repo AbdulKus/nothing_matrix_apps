@@ -45,7 +45,9 @@ class WeatherClockTest {
             val frames = (0..360).map { WeatherRenderer.render(condition, it / 10.0) }
             frames.forEach { frame ->
                 assertEquals(169, frame.size)
-                assertTrue("$condition needs a sparse silhouette", frame.count { it >= 45 } in 5..85)
+                // A gust may fade completely between emissions; other scenes retain their icon.
+                val minimum = if (condition == WeatherCondition.WIND) 0 else 5
+                assertTrue("$condition needs a sparse silhouette", frame.count { it >= 45 } in minimum..85)
                 frame.forEachIndexed { i, value ->
                     assertTrue(value in 0..255)
                     if (!MatrixEngine.isInsideMatrix(i % 13, i / 13)) assertEquals(0, value)
