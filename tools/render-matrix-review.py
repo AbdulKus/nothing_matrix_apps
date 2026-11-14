@@ -38,7 +38,7 @@ markup = '''<!doctype html>
 const matrixData = __DATA__;
 const rowWidths = [5,9,11,11,13,13,13,13,13,11,11,9,5];
 const samples=[];
-for (const [group, title] of [['weather','Погода · 13×13, 137 диодов'],['clocks','Шрифты · 12:34 / 20:58 / 09:16'],['layouts','Оформление · 12:34'],['transitions','Переходы из часов'],['meteors','Падающие звёзды']]) {
+for (const [group, title] of [['weather','Погода · 13×13, 137 диодов'],['clocks','Шрифты · 12:34 / 20:58 / 09:16'],['layouts','Оформление · 12:34'],['transitions','Переходы из часов'],['meteors','Падающие звёзды'],['moons','Луна']]) {
   if(!matrixData[group]?.length) continue;
   const section=document.getElementById('matrix-sections');
   const heading=document.createElement('h3');heading.textContent=title;
@@ -60,7 +60,7 @@ for (const [group, title] of [['weather','Погода · 13×13, 137 диодо
 let paused=matchMedia('(prefers-reduced-motion: reduce)').matches, tick=0;
 const button=document.getElementById('pause-matrix');
 const timeline=document.getElementById('matrix-time'), seconds=document.getElementById('matrix-seconds');
-const cycleTicks=Math.max(1,...samples.map(s=>s.frames.length*(['weather','transitions','meteors'].includes(s.group)?1:25)));
+const cycleTicks=Math.max(1,...samples.map(s=>s.frames.length*(['weather','transitions','meteors','moons'].includes(s.group)?1:25)));
 timeline.max=String(cycleTicks-1);
 function label(){button.textContent=paused?'Продолжить':'Пауза';button.setAttribute('aria-pressed',String(paused));}
 button.onclick=()=>{paused=!paused;label();};label();
@@ -68,7 +68,7 @@ timeline.oninput=()=>{paused=true;tick=Number(timeline.value);label();draw();};
 function draw(){
  timeline.value=String(tick%cycleTicks);seconds.textContent=`${((tick%cycleTicks)/10).toFixed(1)} с`;
  for(const {canvas,group,frames} of samples){
-  const f=frames[(group==='weather'||group==='transitions'||group==='meteors'?tick:Math.floor(tick/25))%frames.length];
+  const f=frames[(group==='weather'||group==='transitions'||group==='meteors'||group==='moons'?tick:Math.floor(tick/25))%frames.length];
   const ctx=canvas.getContext('2d');ctx.clearRect(0,0,156,156);
   for(let y=0;y<13;y++)for(let x=0;x<13;x++){
    if(Math.abs(x-6)>(rowWidths[y]-1)/2)continue;
@@ -82,6 +82,10 @@ draw();setInterval(()=>{if(!paused){tick++;draw();}},100);
 </script></body></html>'''
 (OUTPUT / 'matrix-review.html').write_text(markup.replace('__DATA__', json.dumps(packed, ensure_ascii=False, separators=(',', ':'))))
 (OUTPUT / 'weather-review.html').write_text(markup.replace('__DATA__', json.dumps({'weather':packed['weather']}, ensure_ascii=False, separators=(',', ':'))))
+if 'moons' in packed:
+    ordinary = [dict(name=item['name'].split(' · ')[0], frames=item['frames']) for item in packed['moons'] if item['name'].endswith('обычная')]
+    (OUTPUT / 'moon-scenes.html').write_text(markup.replace('__DATA__', json.dumps({'moons':ordinary}, ensure_ascii=False, separators=(',', ':'))))
+    (OUTPUT / 'moon-review.html').write_text(markup.replace('__DATA__', json.dumps({'moons':packed['moons']}, ensure_ascii=False, separators=(',', ':'))))
 if 'meteors' in packed:
     (OUTPUT / 'night-review.html').write_text(markup.replace('__DATA__', json.dumps({'meteors':packed['meteors']}, ensure_ascii=False, separators=(',', ':'))))
 if 'transitions' in packed:

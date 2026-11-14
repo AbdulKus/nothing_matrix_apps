@@ -6,7 +6,9 @@ import kotlin.math.*
 /** Layered weather with crisp integer-pixel rasterization. Brightness changes only for actual effects. */
 object WeatherRenderer {
     private val cloudShape = listOf("....###..", "...#...#.", ".##.....#", "#.......#", ".#######.")
-    private val moonShape = listOf("...###", "..###.", ".###..", "###...", "###...", ".###..", "..###.", "...###")
+    // Pixel coverage of a round 8x8 disk minus a smaller disk offset up/right.
+    // Trim the empty right margin: the visible crescent is 6x8, with unequal curved horns.
+    private val moonShape = listOf("..#...", ".##...", "##....", "##....", "###...", "###...", ".####.", "..####")
     private val starSites = listOf(2 to 3, 4 to 1, 9 to 2, 10 to 4, 11 to 7, 9 to 10, 7 to 11, 4 to 11, 2 to 9, 1 to 6, 8 to 0, 5 to 12)
 
     fun render(condition: WeatherCondition, seconds: Double, tiltX: Float = 0f, tiltY: Float = 0f): IntArray {
@@ -147,7 +149,10 @@ object WeatherRenderer {
     }
 
     private fun cloud(c: Canvas, x: Double, y: Double, level: Int) = c.stamp(x, y, cloudShape, level, opaque = true)
-    private fun moon(c: Canvas, x: Double, y: Double) = c.stamp(x, y, moonShape, 245, opaque = true)
+    private fun moon(c: Canvas, x: Double, y: Double) {
+        // Keep both horns inside the real circular mask, even at the extreme tilt poses.
+        c.stamp(x.roundToInt().coerceIn(2, 5).toDouble(), y.roundToInt().coerceIn(1, 4).toDouble(), moonShape, 245, opaque = true)
+    }
     private fun sun(c: Canvas, x: Double, y: Double, t: Double, tx: Double, ty: Double, large: Boolean) {
         val cx = x + sin(t * 0.55) * 0.65 + tx
         val cy = y + sin(t * 0.43 + 0.7) * 0.65 + ty

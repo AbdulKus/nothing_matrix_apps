@@ -113,6 +113,14 @@ class WeatherClockTest {
                 frameJson(WeatherRenderer.render(WeatherCondition.CLEAR_NIGHT, first - 0.2 + tick / 10.0))
             } + "]}"
         }
-        File("build/reports/matrix-review/frames.json").apply { parentFile?.mkdirs(); writeText("{\"weather\":[$weather],\"clocks\":[$clocks],\"layouts\":[$layouts],\"tilt\":[$tilted],\"transitions\":[$transitions],\"meteors\":[$meteors]}") }
+        val moons = listOf(WeatherCondition.CLEAR_NIGHT, WeatherCondition.PARTLY_CLOUDY_NIGHT).flatMap { condition ->
+            listOf(0f to 0f, -1f to -1f, 1f to -1f, -1f to 1f, 1f to 1f).map { (x, y) ->
+                val pose = if (x == 0f && y == 0f) "обычная" else "наклон X=$x Y=$y"
+                "{\"name\":\"${condition.ru} · $pose\",\"frames\":[" + (0 until 160).joinToString(",") { tick ->
+                    frameJson(WeatherRenderer.render(condition, tick / 10.0, x, y))
+                } + "]}"
+            }
+        }.joinToString(",")
+        File("build/reports/matrix-review/frames.json").apply { parentFile?.mkdirs(); writeText("{\"weather\":[$weather],\"clocks\":[$clocks],\"layouts\":[$layouts],\"tilt\":[$tilted],\"transitions\":[$transitions],\"meteors\":[$meteors],\"moons\":[$moons]}") }
     }
 }
