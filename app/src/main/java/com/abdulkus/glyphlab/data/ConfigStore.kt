@@ -34,11 +34,15 @@ class ConfigStore(context: Context) {
             // configurable clock overlay.
             prefs.getBoolean(KEY_LEGACY_CLOCK_ENABLED, false)
         ),
-        clockLockScreenOnly = prefs.getBoolean(KEY_CLOCK_LOCK_SCREEN_ONLY, false)
+        clockLockScreenOnly = prefs.getBoolean(KEY_CLOCK_LOCK_SCREEN_ONLY, false),
+        clockFont = prefs.enum("clock_font", ClockFont.CLASSIC),
+        clockLayout = prefs.enum("clock_layout", ClockLayout.STACKED)
     )
 
     fun save(config: MatrixConfig) {
         prefs.edit()
+            .putString("clock_font", config.clockFont.name)
+            .putString("clock_layout", config.clockLayout.name)
             .putString(KEY_EFFECT, config.effect.name)
             .putString(KEY_SOLID, config.solid.name)
             .putFloat(KEY_SPEED, config.speed)

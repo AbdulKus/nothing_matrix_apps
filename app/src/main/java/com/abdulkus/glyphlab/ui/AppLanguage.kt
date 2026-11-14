@@ -23,6 +23,21 @@ enum class AppLanguage(
 
 object UiStrings {
     private val en = mapOf(
+        "effect_weather" to "WEATHER",
+        "weather_updated" to "As of",
+        "weather_source" to "Weather data: Open-Meteo (CC BY 4.0). Approximate location is sent to Open-Meteo. The saved area refreshes every 30 min; data older than 3 h shows No data.",
+        "weather_permission" to "Allow approximate location to load local weather. You can also enable it in Android app settings.",
+        "weather_location_error" to "Could not locate you. Enable Location in Android and try again.",
+        "weather_network_error" to "Weather could not refresh. Check your connection and try again.",
+        "weather_loading" to "UPDATING…",
+        "weather_locate" to "UPDATE FOR MY LOCATION",
+        "weather_gallery" to "PREVIEW WEATHER · 17 SCENES",
+        "weather_preview_hint" to "Animation previews on the app screen. Tap a scene to enlarge it.",
+        "clock_layout" to "CLOCK STYLE",
+        "clock_font" to "PIXEL FONT",
+        "clock_sleep_style" to "This style is also used by the clock while sleeping.",
+        "close" to "Close",
+
         "choose_language" to "Choose language",
         "settings" to "SETTINGS",
         "shape" to "SHAPE",
@@ -75,6 +90,21 @@ object UiStrings {
     )
 
     private val ru = mapOf(
+        "effect_weather" to "ПОГОДА",
+        "weather_updated" to "Данные на",
+        "weather_source" to "Погода: Open-Meteo (CC BY 4.0). Примерное местоположение передаётся Open-Meteo. Сохранённый район обновляется каждые 30 мин; через 3 ч без обновлений — «Нет данных».",
+        "weather_permission" to "Разрешите примерное местоположение для местной погоды. Доступ также можно включить в настройках приложения Android.",
+        "weather_location_error" to "Не удалось определить район. Включите геолокацию в Android и попробуйте снова.",
+        "weather_network_error" to "Не удалось обновить погоду. Проверьте интернет и повторите попытку.",
+        "weather_loading" to "ОБНОВЛЕНИЕ…",
+        "weather_locate" to "ОБНОВИТЬ ДЛЯ МОЕГО РАЙОНА",
+        "weather_gallery" to "ПРЕВЬЮ ПОГОДЫ · 17 СЦЕН",
+        "weather_preview_hint" to "Анимации на экране приложения. Нажмите на сцену, чтобы увеличить.",
+        "clock_layout" to "ОФОРМЛЕНИЕ ЧАСОВ",
+        "clock_font" to "ПИКСЕЛЬНЫЙ ШРИФТ",
+        "clock_sleep_style" to "Это оформление применяется и к часам во время сна.",
+        "close" to "Закрыть",
+
         "choose_language" to "Выберите язык", "settings" to "НАСТРОЙКИ", "shape" to "ФОРМА",
         "bright_vertices" to "Яркие вершины", "rotation_axes" to "ОСИ АВТОВРАЩЕНИЯ",
         "intensity" to "ИНТЕНСИВНОСТЬ", "particles" to "ЧАСТИЦЫ", "flow" to "СЫПУЧЕСТЬ",

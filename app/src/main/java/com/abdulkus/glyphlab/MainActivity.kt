@@ -345,6 +345,13 @@ private fun SettingsPanel(config: MatrixConfig, onChange: (MatrixConfig) -> Unit
             }
         }
 
+        if (config.effect == EffectType.WEATHER) {
+            com.abdulkus.glyphlab.ui.WeatherSettings(com.abdulkus.glyphlab.ui.AppLanguage.RU)
+        }
+        if (config.effect == EffectType.CLOCK) {
+            com.abdulkus.glyphlab.ui.ClockSettings(com.abdulkus.glyphlab.ui.AppLanguage.RU, config, onChange)
+        }
+
         when (config.effect) {
             EffectType.FIRE, EffectType.PLASMA -> ConfigSlider(
                 "ИНТЕНСИВНОСТЬ",
@@ -369,7 +376,7 @@ private fun SettingsPanel(config: MatrixConfig, onChange: (MatrixConfig) -> Unit
                 { "${(it * 100).roundToInt()}%" }
             ) { onChange(config.copy(trail = it)) }
 
-            EffectType.WIREFRAME, EffectType.CLOCK -> Unit
+            EffectType.WIREFRAME, EffectType.CLOCK, EffectType.WEATHER -> Unit
         }
 
         if (config.effect != EffectType.CLOCK) {
@@ -410,18 +417,20 @@ private fun SettingsPanel(config: MatrixConfig, onChange: (MatrixConfig) -> Unit
             )
         }
         if (config.effect != EffectType.CLOCK) {
-            ToggleRow("Акселерометр", config.accelerometer) {
-                onChange(config.copy(accelerometer = it))
-            }
-            if (config.accelerometer) {
-                ConfigSlider(
-                    "РЕАКЦИЯ НА НАКЛОН",
-                    config.sensorStrength,
-                    { "${(it * 100).roundToInt()}%" }
-                ) { onChange(config.copy(sensorStrength = it)) }
-            }
+            if (config.effect != EffectType.WEATHER) {
+                ToggleRow("Акселерометр", config.accelerometer) {
+                    onChange(config.copy(accelerometer = it))
+                }
+                if (config.accelerometer) {
+                    ConfigSlider(
+                        "РЕАКЦИЯ НА НАКЛОН",
+                        config.sensorStrength,
+                        { "${(it * 100).roundToInt()}%" }
+                    ) { onChange(config.copy(sensorStrength = it)) }
+                }
 
-            Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(8.dp))
+            }
             Label("ЧАСТОТА КАДРОВ")
             ChoiceRow(
                 items = listOf(12, 18, 24, 30),
@@ -446,6 +455,7 @@ private fun ClockSettings(config: MatrixConfig, onChange: (MatrixConfig) -> Unit
         ToggleRow("Часы во время сна", config.sleepClockEnabled) {
             onChange(config.copy(sleepClockEnabled = it))
         }
+        if (config.sleepClockEnabled) com.abdulkus.glyphlab.ui.ClockSettings(com.abdulkus.glyphlab.ui.AppLanguage.RU, config, onChange)
     }
 }
 

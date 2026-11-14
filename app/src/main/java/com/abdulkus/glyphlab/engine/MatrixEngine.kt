@@ -26,7 +26,8 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
         config: MatrixConfig,
         timeNanos: Long,
         tiltX: Float = 0f,
-        tiltY: Float = 0f
+        tiltY: Float = 0f,
+        weather: com.abdulkus.glyphlab.weather.WeatherCondition = com.abdulkus.glyphlab.weather.WeatherCondition.UNKNOWN
     ): IntArray {
         val time = timeNanos / 1_000_000_000.0
         val dt = if (lastNanos == 0L) 1f / config.frameRate else {
@@ -47,7 +48,8 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
             EffectType.GRAVITY -> renderGravity(config, dt, sensorX, sensorY)
             EffectType.PLASMA -> renderPlasma(config, time, sensorX, sensorY)
             EffectType.STARFIELD -> renderStarfield(config, dt, sensorX, sensorY)
-            EffectType.CLOCK -> SleepClockRenderer.render()
+            EffectType.CLOCK -> ClockRenderer.render(font = config.clockFont, layout = config.clockLayout)
+            EffectType.WEATHER -> WeatherRenderer.render(weather, time * config.speed * 2)
         }
 
         val brightness = config.brightness.coerceIn(0f, 1f)
@@ -189,7 +191,7 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
     }
 
     private fun resizeSand(targetCount: Int) {
-        while (sand.size > targetCount) sand.removeLast()
+        while (sand.size > targetCount) sand.removeAt(sand.lastIndex)
         val occupied = sand.mapTo(mutableSetOf()) { index(it.x, it.y) }
         var attempts = 0
         while (sand.size < targetCount && attempts++ < 800) {

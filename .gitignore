@@ -9,3 +9,5 @@ captures/
 app/signing/*.p12
 app/signing/*.jks
 app/signing/*.keystore
+
+.kotlin/

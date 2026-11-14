@@ -11,6 +11,8 @@ import com.abdulkus.glyphlab.data.AutoBrightnessSource
 import com.abdulkus.glyphlab.data.ConfigStore
 import com.abdulkus.glyphlab.data.EffectType
 import com.abdulkus.glyphlab.data.MatrixConfig
+import com.abdulkus.glyphlab.weather.WeatherCondition
+import com.abdulkus.glyphlab.weather.WeatherRepository
 import com.abdulkus.glyphlab.engine.MatrixEngine
 import com.abdulkus.glyphlab.engine.MinuteClockFrameCache
 import com.nothing.ketchum.Glyph
@@ -47,6 +49,7 @@ class GlyphRuntime(context: Context) : SensorEventListener {
     private val screenBrightness = ScreenBrightnessMonitor(appContext) {
         brightnessWake.trySend(Unit)
     }
+    private val weather = WeatherRepository.get(appContext)
     private val engine = MatrixEngine()
     private val clockFrames = MinuteClockFrameCache()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -105,9 +108,10 @@ class GlyphRuntime(context: Context) : SensorEventListener {
                     val clockVisible = current.effect == EffectType.CLOCK
                     if (!clockVisible) lastClockHardwareFrame = null
                     val next = if (clockVisible) {
-                        clockFrames.frame(masterBrightness = current.brightness)
+                        clockFrames.frame(masterBrightness = current.brightness, font = current.clockFont, layout = current.clockLayout)
                     } else {
-                        engine.render(current, System.nanoTime(), tiltX, tiltY)
+                        if (current.effect == EffectType.WEATHER) weather.refreshIfNeeded()
+                        engine.render(current, System.nanoTime(), tiltX, tiltY, weather.state.value.snapshot?.currentCondition() ?: WeatherCondition.UNKNOWN)
                     }
                     _frame.value = next
                     val automatic = automaticScale(current)

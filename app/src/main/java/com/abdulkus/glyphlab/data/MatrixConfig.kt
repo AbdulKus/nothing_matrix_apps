@@ -6,7 +6,8 @@ enum class EffectType(val title: String, val shortTitle: String) {
     GRAVITY("Гравитация", "ПЕСОК"),
     PLASMA("Плазменные волны", "ПЛАЗМА"),
     STARFIELD("Гиперпрыжок", "ЗВЁЗДЫ"),
-    CLOCK("Часы", "ЧАСЫ")
+    CLOCK("Часы", "ЧАСЫ"),
+    WEATHER("Погода", "ПОГОДА")
 }
 
 enum class SolidType(val title: String) {
@@ -40,5 +41,7 @@ data class MatrixConfig(
     val showVertices: Boolean = true,
     val frameRate: Int = 24,
     val sleepClockEnabled: Boolean = false,
-    val clockLockScreenOnly: Boolean = false
+    val clockLockScreenOnly: Boolean = false,
+    val clockFont: ClockFont = ClockFont.CLASSIC,
+    val clockLayout: ClockLayout = ClockLayout.STACKED
 )

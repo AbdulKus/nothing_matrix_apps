@@ -557,6 +557,13 @@ private fun SettingsPanel(language: AppLanguage, config: MatrixConfig, onChange:
             }
         }
 
+        if (config.effect == EffectType.WEATHER) {
+            com.abdulkus.glyphlab.ui.WeatherSettings(language)
+        }
+        if (config.effect == EffectType.CLOCK) {
+            com.abdulkus.glyphlab.ui.ClockSettings(language, config, onChange)
+        }
+
         when (config.effect) {
             EffectType.FIRE, EffectType.PLASMA -> ConfigSlider(language.t("intensity"), config.intensity, { "${(it * 100).roundToInt()}%" }) {
                 onChange(config.copy(intensity = it))
@@ -572,7 +579,7 @@ private fun SettingsPanel(language: AppLanguage, config: MatrixConfig, onChange:
             EffectType.STARFIELD -> ConfigSlider(language.t("trail"), config.trail, { "${(it * 100).roundToInt()}%" }) {
                 onChange(config.copy(trail = it))
             }
-            EffectType.WIREFRAME, EffectType.CLOCK -> Unit
+            EffectType.WIREFRAME, EffectType.CLOCK, EffectType.WEATHER -> Unit
         }
 
         if (config.effect != EffectType.CLOCK) {
@@ -603,10 +610,12 @@ private fun SettingsPanel(language: AppLanguage, config: MatrixConfig, onChange:
         }
 
         if (config.effect != EffectType.CLOCK) {
-            ToggleRow(language.t("accelerometer"), config.accelerometer) { onChange(config.copy(accelerometer = it)) }
-            if (config.accelerometer) {
-                ConfigSlider(language.t("tilt_response"), config.sensorStrength, { "${(it * 100).roundToInt()}%" }) {
-                    onChange(config.copy(sensorStrength = it))
+            if (config.effect != EffectType.WEATHER) {
+                ToggleRow(language.t("accelerometer"), config.accelerometer) { onChange(config.copy(accelerometer = it)) }
+                if (config.accelerometer) {
+                    ConfigSlider(language.t("tilt_response"), config.sensorStrength, { "${(it * 100).roundToInt()}%" }) {
+                        onChange(config.copy(sensorStrength = it))
+                    }
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -622,6 +631,7 @@ private fun SettingsPanel(language: AppLanguage, config: MatrixConfig, onChange:
             ToggleRow(language.t("lock_only"), config.clockLockScreenOnly) { onChange(config.copy(clockLockScreenOnly = it)) }
         } else {
             ToggleRow(language.t("sleep_clock"), config.sleepClockEnabled) { onChange(config.copy(sleepClockEnabled = it)) }
+            if (config.sleepClockEnabled) com.abdulkus.glyphlab.ui.ClockSettings(language, config, onChange)
         }
     }
 }
@@ -773,6 +783,7 @@ private fun effectTitle(language: AppLanguage, effect: EffectType): String = lan
         EffectType.PLASMA -> "effect_plasma"
         EffectType.STARFIELD -> "effect_starfield"
         EffectType.CLOCK -> "effect_clock"
+        EffectType.WEATHER -> "effect_weather"
     }
 )
 

@@ -61,8 +61,18 @@ jobs:
 
           echo "configured=true" >> "${GITHUB_OUTPUT}"
 
-      - name: Run unit tests
-        run: ./gradlew testDebugUnitTest --stacktrace
+      - name: Run unit tests and Android lint
+        run: ./gradlew testDebugUnitTest lintDebug --stacktrace
+
+      - name: Render matrix visual review
+        run: python3 tools/render-matrix-review.py
+
+      - name: Upload matrix visual review
+        uses: actions/upload-artifact@v4
+        with:
+          name: matrix-visual-review
+          path: app/build/reports/matrix-review/
+          if-no-files-found: error
 
       - name: Build signed release APK
         if: steps.signing.outputs.configured == 'true'

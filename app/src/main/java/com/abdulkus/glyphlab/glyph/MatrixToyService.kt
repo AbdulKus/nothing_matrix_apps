@@ -19,8 +19,11 @@ import android.os.Messenger
 import android.os.PowerManager
 import android.os.SystemClock
 import com.abdulkus.glyphlab.data.AutoBrightnessSource
+import com.abdulkus.glyphlab.data.EffectType
 import com.abdulkus.glyphlab.data.ConfigStore
 import com.abdulkus.glyphlab.data.MatrixConfig
+import com.abdulkus.glyphlab.weather.WeatherCondition
+import com.abdulkus.glyphlab.weather.WeatherRepository
 import com.abdulkus.glyphlab.engine.MatrixEngine
 import com.abdulkus.glyphlab.engine.MinuteClockFrameCache
 import com.nothing.ketchum.Glyph
@@ -39,6 +42,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 class MatrixToyService : Service(), SensorEventListener {
+    private val weather by lazy { WeatherRepository.get(this) }
     private val engine = MatrixEngine()
     private val clockFrames = MinuteClockFrameCache()
     private val brightnessWake = Channel<Unit>(Channel.CONFLATED)
@@ -103,8 +107,8 @@ class MatrixToyService : Service(), SensorEventListener {
                     }
                     GlyphToy.EVENT_CHANGE -> {
                         config = config.copy(
-                            effect = enumValues<com.abdulkus.glyphlab.data.EffectType>()[
-                                (config.effect.ordinal + 1) % enumValues<com.abdulkus.glyphlab.data.EffectType>().size
+                            effect = enumValues<EffectType>()[
+                                (config.effect.ordinal + 1) % enumValues<EffectType>().size
                             ]
                         )
                         configStore.save(config)
@@ -275,9 +279,12 @@ class MatrixToyService : Service(), SensorEventListener {
         current: MatrixConfig,
         outputMode: MatrixOutputMode
     ): IntArray = when (outputMode) {
-        MatrixOutputMode.CLOCK -> clockFrames.frame(masterBrightness = current.brightness)
+        MatrixOutputMode.CLOCK -> clockFrames.frame(masterBrightness = current.brightness, font = current.clockFont, layout = current.clockLayout)
         MatrixOutputMode.OFF -> OFF_FRAME
-        MatrixOutputMode.EFFECT -> engine.render(current, System.nanoTime(), tiltX, tiltY)
+        MatrixOutputMode.EFFECT -> {
+            if (current.effect == EffectType.WEATHER) weather.refreshIfNeeded()
+            engine.render(current, System.nanoTime(), tiltX, tiltY, weather.state.value.snapshot?.currentCondition() ?: WeatherCondition.UNKNOWN)
+        }
     }
 
     private fun outputMode(current: MatrixConfig): MatrixOutputMode =
