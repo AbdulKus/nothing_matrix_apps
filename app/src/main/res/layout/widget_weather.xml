@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_circle_background"
+    android:padding="2dp">
+
+    <ImageView
+        android:id="@+id/widget_dial_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_centerInParent="true"
+        android:scaleType="fitCenter"
+        android:contentDescription="@string/widget_weather_desc" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <!-- Upper 70%: Tap to trigger live Nothing matrix weather animation and refresh -->
+        <View
+            android:id="@+id/widget_tap_matrix"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="7"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <!-- Lower 30%: Tap to open Glyph Lab app settings -->
+        <View
+            android:id="@+id/widget_tap_open"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="3"
+            android:clickable="true"
+            android:focusable="true" />
+
+    </LinearLayout>
+
+</RelativeLayout>

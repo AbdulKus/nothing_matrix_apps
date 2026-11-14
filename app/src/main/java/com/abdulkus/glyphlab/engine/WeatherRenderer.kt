@@ -35,7 +35,7 @@ object WeatherRenderer {
             }
             WeatherCondition.CLOUDY -> {
                 cloud(c, 1.7 - sin(t * 0.4) * 0.6 + objectX, 1.0 + verticalDrift(t + 6), 85)
-                cloud(c, 2.8 + sin(t * 0.5) * 0.65 + objectX, 6.0 + verticalDrift(t), 235)
+                cloud(c, 2.8 + sin(t * 0.5) * 0.65 + objectX, 5.0 + verticalDrift(t), 235)
             }
             WeatherCondition.FOG -> {
                 for (row in 0..4) {

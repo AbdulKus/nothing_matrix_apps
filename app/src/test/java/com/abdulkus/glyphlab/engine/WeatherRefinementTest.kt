@@ -197,4 +197,12 @@ class WeatherRefinementTest {
         val iceCols = (0..12).filter { x -> rimeFrame[11 * 13 + x] > 0 }
         assertEquals((2..10).toList(), iceCols)
     }
+
+    @Test fun cloudyFrontCloudOverlapsDarkerCloudAtRow5() {
+        val frames = (0..70).map { WeatherRenderer.render(WeatherCondition.CLOUDY, it / 10.0) }
+        // Front cloud (235) reaches row 5 to overlap back cloud (85)
+        assertTrue(frames.any { frame -> (0..12).any { x -> frame[5 * 13 + x] == 235 } })
+        // Back cloud (85) is visible in higher rows (1..4)
+        assertTrue(frames.any { frame -> (0..12).any { x -> frame[2 * 13 + x] == 85 } })
+    }
 }

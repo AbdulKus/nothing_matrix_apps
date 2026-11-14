@@ -114,6 +114,7 @@ class WeatherRepository private constructor(context: Context) {
             check(System.currentTimeMillis() - snapshot.observedAt in -900_000L..WeatherSnapshot.MAX_AGE_MS)
             prefs.edit().putString("current", current.toString()).apply()
             _state.value = WeatherState(snapshot)
+            runCatching { com.abdulkus.glyphlab.widget.WeatherWidgetProvider.updateStatic(app) }
         } catch (cancelled: CancellationException) {
             _state.value = _state.value.copy(loading = false)
             throw cancelled

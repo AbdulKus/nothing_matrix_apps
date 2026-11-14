@@ -2,4 +2,6 @@
     <string name="app_name">Glyph Lab</string>
     <string name="toy_name">Glyph Lab AOD</string>
     <string name="toy_summary">The active Glyph Lab effect on the 13×13 matrix</string>
+    <string name="widget_weather_name">Nothing Weather</string>
+    <string name="widget_weather_desc">Nothing circular weather widget with animated Glyph Matrix</string>
 </resources>

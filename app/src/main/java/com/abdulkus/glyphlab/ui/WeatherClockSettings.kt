@@ -86,6 +86,11 @@ fun WeatherSettings(language: AppLanguage) {
         OutlinedButton(onClick = { showGallery = true }, modifier = Modifier.fillMaxWidth()) {
             Text(language.t("weather_gallery").replace("{count}", WeatherCondition.entries.size.toString()), fontSize = 12.sp)
         }
+        OutlinedButton(onClick = {
+            com.abdulkus.glyphlab.widget.WeatherWidgetProvider.pinWidget(context)
+        }, modifier = Modifier.fillMaxWidth()) {
+            Text(language.t("add_weather_widget"), fontSize = 12.sp)
+        }
     }
     if (showGallery) WeatherGallery(language) { showGallery = false }
 }
