@@ -66,7 +66,7 @@ class WeatherMotionTest {
         }
         val a = WeatherRenderer.render(WeatherCondition.CLEAR_NIGHT, 4.0, -1f, -1f)
         val b = WeatherRenderer.render(WeatherCondition.CLEAR_NIGHT, 4.0, 1f, 1f)
-        a.indices.filter { it % 13 <= 1 || it % 13 >= 11 || it / 13 >= 11 }.forEach { assertEquals(a[it], b[it]) }
+        a.indices.filter { it % 13 <= 1 || it % 13 >= 11 || (it / 13 == 0 || it / 13 == 12) }.forEach { assertEquals(a[it], b[it]) }
     }
 
     @Test fun shapesUseOnlyTheirOwnBrightnessWithoutFuzzyNeighbours() {
