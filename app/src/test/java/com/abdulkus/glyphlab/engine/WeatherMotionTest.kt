@@ -69,11 +69,32 @@ class WeatherMotionTest {
         a.indices.filter { it % 13 <= 1 || it % 13 >= 11 || it / 13 >= 11 }.forEach { assertEquals(a[it], b[it]) }
     }
 
-    @Test fun tinyTiltChangesDoNotTranslateAnEntireSceneByOnePixel() {
-        WeatherCondition.entries.forEach { condition ->
-            val a = WeatherRenderer.render(condition, 2.0, 0.499f, 0.499f)
-            val b = WeatherRenderer.render(condition, 2.0, 0.501f, 0.501f)
-            assertTrue("$condition has a rounding jump", a.indices.sumOf { abs(a[it]-b[it]) } < 160)
+    @Test fun shapesUseOnlyTheirOwnBrightnessWithoutFuzzyNeighbours() {
+        val palettes = mapOf(
+            WeatherCondition.CLOUDY to setOf(0, 85, 235),
+            WeatherCondition.SUNNY to setOf(0, 230, 255),
+            WeatherCondition.HAIL to setOf(0, 225, 235),
+            WeatherCondition.SNOW to setOf(0, 170, 180, 225, 250)
+        )
+        palettes.forEach { (condition, levels) ->
+            repeat(360) { tick ->
+                assertTrue("$condition contains interpolated edge pixels", WeatherRenderer.render(condition, tick / 10.0, 0.7f, -0.4f).all { it in levels })
+            }
+        }
+    }
+
+    @Test fun shootingStarsAlwaysDescendDiagonallyAndExitWithTheirTail() {
+        val stars = (0..10500).mapNotNull { WeatherRenderer.meteor(it / 20.0) }
+        assertTrue(stars.any { it.dx > 0 }); assertTrue(stars.any { it.dx < 0 })
+        assertTrue(stars.map { (it.startY * 10).toInt() }.distinct().size > 10)
+        stars.forEach { star ->
+            assertTrue(star.dy > 0)
+            assertTrue(abs(star.dy / star.dx) in 0.57..1.12)
+            assertTrue(star.startX <= -4 || star.startX >= 16)
+            assertTrue(star.endX <= -4 || star.endX >= 16)
+            val tailEndX = star.endX - star.dx * 2.8
+            assertTrue(tailEndX < 0 || tailEndX > 12)
+            assertTrue(star.endY > star.startY)
         }
     }
 }

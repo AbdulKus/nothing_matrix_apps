@@ -63,13 +63,9 @@ class ClockTransitionRenderer {
             return f
         }
         private fun splat(f: IntArray, x: Double, y: Double, value: Double) {
-            val ix = floor(x).toInt(); val iy = floor(y).toInt()
-            for (dy in 0..1) for (dx in 0..1) {
-                val px = ix + dx; val py = iy + dy
-                if (MatrixEngine.isInsideMatrix(px, py)) {
-                    val w = (1 - abs(x - px)) * (1 - abs(y - py))
-                    f[py * 13 + px] = max(f[py * 13 + px], (value * w).roundToInt().coerceIn(0, 255))
-                }
+            val px = x.roundToInt(); val py = y.roundToInt()
+            if (MatrixEngine.isInsideMatrix(px, py)) {
+                f[py * 13 + px] = max(f[py * 13 + px], value.roundToInt().coerceIn(0, 255))
             }
         }
     }

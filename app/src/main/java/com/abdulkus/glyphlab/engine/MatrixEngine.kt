@@ -22,7 +22,7 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
     private val stars = MutableList(34) { newStar() }
     private var lastNanos = 0L
     private var weatherSeconds = 0.0
-    private val weatherTilt = TiltFilter(0.18)
+    private val weatherTilt = TiltStabilizer()
 
     fun render(
         config: MatrixConfig,

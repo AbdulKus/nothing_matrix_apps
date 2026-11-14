@@ -104,6 +104,15 @@ class WeatherClockTest {
                 frameJson(ClockTransitionRenderer.compose(clock, WeatherRenderer.render(WeatherCondition.RAIN, tick / 10.0), style, p, WeatherRenderer.render(WeatherCondition.RAIN, 0.0)))
             } + "]}"
         }
-        File("build/reports/matrix-review/frames.json").apply { parentFile?.mkdirs(); writeText("{\"weather\":[$weather],\"clocks\":[$clocks],\"layouts\":[$layouts],\"tilt\":[$tilted],\"transitions\":[$transitions]}") }
+        val meteors = listOf(true, false).joinToString(",") { rightward ->
+            val first = (0..420).first { tick ->
+                WeatherRenderer.meteor(tick / 10.0)?.let { (it.dx > 0) == rightward } == true
+            } / 10.0
+            val name = if (rightward) "Слева направо" else "Справа налево"
+            "{\"name\":\"$name\",\"frames\":[" + (0 until 24).joinToString(",") { tick ->
+                frameJson(WeatherRenderer.render(WeatherCondition.CLEAR_NIGHT, first - 0.2 + tick / 10.0))
+            } + "]}"
+        }
+        File("build/reports/matrix-review/frames.json").apply { parentFile?.mkdirs(); writeText("{\"weather\":[$weather],\"clocks\":[$clocks],\"layouts\":[$layouts],\"tilt\":[$tilted],\"transitions\":[$transitions],\"meteors\":[$meteors]}") }
     }
 }

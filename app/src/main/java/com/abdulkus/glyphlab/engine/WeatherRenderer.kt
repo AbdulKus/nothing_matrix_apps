@@ -3,10 +3,10 @@ package com.abdulkus.glyphlab.engine
 import com.abdulkus.glyphlab.weather.WeatherCondition
 import kotlin.math.*
 
-/** Layered, deterministic weather. Fractional positions are coverage, not blurred bitmap scaling. */
+/** Layered weather with crisp integer-pixel rasterization. Brightness changes only for actual effects. */
 object WeatherRenderer {
     private val cloudShape = listOf("....###..", "...#...#.", ".##.....#", "#.......#", ".#######.")
-    private val moonShape = listOf("..###", ".###.", "###..", "###..", "###..", ".###.", "..###")
+    private val moonShape = listOf("...###", "..###.", ".###..", "###...", "###...", ".###..", "..###.", "...###")
     private val starSites = listOf(2 to 3, 4 to 1, 9 to 2, 10 to 4, 11 to 7, 9 to 10, 7 to 11, 4 to 11, 2 to 9, 1 to 6, 8 to 0, 5 to 12)
 
     fun render(condition: WeatherCondition, seconds: Double, tiltX: Float = 0f, tiltY: Float = 0f): IntArray {
@@ -14,27 +14,31 @@ object WeatherRenderer {
         val t = seconds.coerceAtLeast(0.0)
         val tx = tiltX.coerceIn(-1f, 1f).toDouble()
         val ty = tiltY.coerceIn(-1f, 1f).toDouble()
-        val cloudX = 2 + sin(t * 0.5) * 0.65 + tx * 0.7
-        val cloudY = 1.6 + sin(t * 0.4) * 0.12 + ty * 0.3
+        // Whole-object translation is independent of the animation's fractional phase.
+        // Symmetric steps keep left/right response identical, including exactly half tilt.
+        val objectX = when { tx >= 0.5 -> 1.0; tx <= -0.5 -> -1.0; else -> 0.0 }
+        val objectY = when { ty >= 0.5 -> 1.0; ty <= -0.5 -> -1.0; else -> 0.0 }
+        val cloudX = 2 + sin(t * 0.5) * 0.65 + objectX
+        val cloudY = 1.6 + sin(t * 0.4) * 0.12 + objectY
         when (condition) {
-            WeatherCondition.SUNNY -> sun(c, 6.0, 6.0, t, tx, ty, true)
+            WeatherCondition.SUNNY -> sun(c, 6.0, 6.0, t, objectX, objectY, true)
             WeatherCondition.CLEAR_NIGHT -> {
                 stars(c, t)
-                moon(c, 3.7 + sin(t * 0.6) * 0.35 + tx * 0.7, 2.6 + cos(t * 0.45) * 0.25 + ty * 0.7)
+                moon(c, 3.0 + sin(t * 0.6) * 0.55 + objectX, 2.0 + cos(t * 0.45) * 0.55 + objectY)
             }
             WeatherCondition.PARTLY_CLOUDY_DAY, WeatherCondition.PARTLY_CLOUDY_NIGHT -> {
-                if (condition == WeatherCondition.PARTLY_CLOUDY_DAY) sun(c, 5.0, 4.0, t, tx, ty, false)
-                else { stars(c, t); moon(c, 3.0 + sin(t * 0.6) * 0.3 + tx * 0.65, 1.0 + ty * 0.6) }
-                cloud(c, 2.7 + sin(t * 0.5) * 0.8 + tx * 0.65, 6.1 + ty * 0.35, 235)
+                if (condition == WeatherCondition.PARTLY_CLOUDY_DAY) sun(c, 5.0, 4.0, t, objectX, objectY, false)
+                else { stars(c, t); moon(c, 2.5 + sin(t * 0.6) * 0.55 + objectX, 1.0 + objectY) }
+                cloud(c, 2.7 + sin(t * 0.5) * 0.8 + objectX, 6.1 + objectY, 235)
             }
             WeatherCondition.CLOUDY -> {
-                cloud(c, 1.7 - sin(t * 0.4) * 0.6 + tx * 0.35, 1.8 + ty * 0.25, 85)
-                cloud(c, 2.8 + sin(t * 0.5) * 0.65 + tx * 0.7, 6.0 + ty * 0.4, 235)
+                cloud(c, 1.7 - sin(t * 0.4) * 0.6 + objectX, 1.8 + objectY, 85)
+                cloud(c, 2.8 + sin(t * 0.5) * 0.65 + objectX, 6.0 + objectY, 235)
             }
             WeatherCondition.FOG, WeatherCondition.RIME_FOG -> {
                 for (row in 0..2) {
-                    val y = 4.0 + row * 2 + ty * 0.3
-                    val offset = sin(t * 0.65 + row * 2) * 0.8 + tx * 0.6
+                    val y = 4.0 + row * 2 + objectY
+                    val offset = sin(t * 0.65 + row * 2) * 0.8 + objectX
                     for (x in 2..10) if (x != 4 + row) c.dot(x + offset, y, if (row == 1) 205.0 else 120.0)
                 }
                 if (condition == WeatherCondition.RIME_FOG) ice(c)
@@ -145,20 +149,19 @@ object WeatherRenderer {
     private fun cloud(c: Canvas, x: Double, y: Double, level: Int) = c.stamp(x, y, cloudShape, level, opaque = true)
     private fun moon(c: Canvas, x: Double, y: Double) = c.stamp(x, y, moonShape, 245, opaque = true)
     private fun sun(c: Canvas, x: Double, y: Double, t: Double, tx: Double, ty: Double, large: Boolean) {
-        val cx = x + sin(t * 0.55) * 0.28 + tx * 0.75
-        val cy = y + sin(t * 0.43 + 0.7) * 0.23 + ty * 0.75
-        val radius = if (large) 2.0 else 1.2
+        val cx = x + sin(t * 0.55) * 0.65 + tx
+        val cy = y + sin(t * 0.43 + 0.7) * 0.65 + ty
         val rayInner = if (large) 3.5 else 2.7
         val rayOuter = if (large) 4.3 else 3.2
         repeat(8) { i ->
             val a = i * PI / 4 + t * 0.12
             c.line(cx + cos(a) * rayInner, cy + sin(a) * rayInner, cx + cos(a) * rayOuter, cy + sin(a) * rayOuter, 230.0)
         }
-        // Complete body on its own layer, including the lower arc behind the cloud.
-        repeat(64) { i ->
-            val a = i * PI / 32
-            c.dot(cx + radius * cos(a), cy + radius * sin(a), 320.0)
-        }
+        // Full, fixed pixel alphabet on its own layer, including the arc behind the cloud.
+        val body = if (large) listOf(".###.", "#...#", "#...#", "#...#", ".###.")
+            else listOf("###", "#.#", "###")
+        val offset = if (large) 2.0 else 1.0
+        c.stamp(cx - offset, cy - offset, body, 255)
     }
 
     private fun stars(c: Canvas, t: Double) {
@@ -171,15 +174,34 @@ object WeatherRenderer {
             val light = (70 + 80 * (sin(t * 1.1 + i * 2.4) + 1) / 2) * envelope
             c.dot(site.first.toDouble(), site.second.toDouble(), light)
         }
-        val cycle = floor(t / 21).toLong()
-        val phase = t % 21 - (5 + random(cycle, 181) * 9)
-        if (phase in 0.0..1.6) {
-            val a = random(cycle, 191) * 2 * PI
-            val r = -10 + phase / 1.6 * 20
-            val x = 6 + cos(a) * r; val y = 6 + sin(a) * r
-            c.line(x - cos(a) * 2.2, y - sin(a) * 2.2, x, y, 135.0)
-            c.dot(x, y, 245.0)
+        meteor(t)?.let { star ->
+            c.line(star.x - star.dx * 2.8, star.y - star.dy * 2.8, star.x, star.y, 100.0)
+            c.line(star.x - star.dx * 1.3, star.y - star.dy * 1.3, star.x, star.y, 170.0)
+            c.dot(star.x, star.y, 245.0)
         }
+    }
+
+    internal data class Meteor(
+        val x: Double, val y: Double, val dx: Double, val dy: Double,
+        val progress: Double, val startX: Double, val startY: Double, val endX: Double, val endY: Double
+    )
+
+    internal fun meteor(t: Double): Meteor? {
+        val cycle = floor(t / 21).toLong()
+        val phase = t - cycle * 21 - (5 + random(cycle, 181) * 9)
+        val duration = 1.6
+        if (phase !in 0.0..duration) return null
+        val rightward = cycle % 2 == 0L
+        val slope = tan((30 + random(cycle, 191) * 18) * PI / 180)
+        val middleY = 4 + random(cycle, 197) * 3
+        val sx = if (rightward) -4.0 else 16.0
+        val ex = if (rightward) 16.0 else -4.0
+        val sy = middleY - 10 * slope
+        val ey = middleY + 10 * slope
+        val length = hypot(ex - sx, ey - sy)
+        val progress = phase / duration
+        return Meteor(sx + (ex - sx) * progress, sy + (ey - sy) * progress,
+            (ex - sx) / length, (ey - sy) / length, progress, sx, sy, ex, ey)
     }
 
     private fun ice(c: Canvas) { for (x in 3..9) c.dot(x.toDouble(), 11.0, if (x % 2 == 0) 200.0 else 65.0) }
@@ -212,42 +234,48 @@ object WeatherRenderer {
     }
 
     private class Canvas {
-        private val values = DoubleArray(169)
-        fun dot(x: Double, y: Double, level: Double) {
-            val ix = floor(x).toInt(); val iy = floor(y).toInt()
-            for (dy in 0..1) for (dx in 0..1) {
-                val px = ix + dx; val py = iy + dy
-                if (MatrixEngine.isInsideMatrix(px, py)) {
-                    val v = level * (1 - abs(x - px)) * (1 - abs(y - py))
-                    values[py * 13 + px] = max(values[py * 13 + px], v)
-                }
+        private val values = IntArray(169)
+        private fun put(x: Int, y: Int, level: Int) {
+            if (MatrixEngine.isInsideMatrix(x, y)) {
+                val i = y * 13 + x
+                values[i] = max(values[i], level.coerceIn(0, 255))
             }
         }
+        fun dot(x: Double, y: Double, level: Double) = put(x.roundToInt(), y.roundToInt(), level.roundToInt())
+
         fun line(x: Double, y: Double, ex: Double, ey: Double, level: Double) {
-            val steps = max(1, (hypot(ex - x, ey - y) * 10).toInt())
-            for (i in 0..steps) dot(x + (ex - x) * i / steps, y + (ey - y) * i / steps, level)
+            // Bresenham: a one-pixel line, with no dim neighbours around the edge.
+            var px = x.roundToInt(); var py = y.roundToInt()
+            val endX = ex.roundToInt(); val endY = ey.roundToInt()
+            val dx = abs(endX - px); val dy = -abs(endY - py)
+            val sx = if (px < endX) 1 else -1
+            val sy = if (py < endY) 1 else -1
+            var error = dx + dy
+            while (true) {
+                put(px, py, level.roundToInt())
+                if (px == endX && py == endY) break
+                val e = 2 * error
+                if (e >= dy) { error += dy; px += sx }
+                if (e <= dx) { error += dx; py += sy }
+            }
         }
+
         fun stamp(x: Double, y: Double, rows: List<String>, level: Int, opaque: Boolean = false) {
-            val ink = DoubleArray(169); val coverage = DoubleArray(169)
+            // Snap the origin once so a sprite cannot change thickness during movement.
+            val originX = x.roundToInt(); val originY = y.roundToInt()
             rows.forEachIndexed { dy, row ->
                 val first = row.indexOf('#'); val last = row.lastIndexOf('#')
                 row.forEachIndexed { dx, bit ->
-                    if (bit != '#' && (!opaque || dx !in first..last)) return@forEachIndexed
-                    val fx = x + dx; val fy = y + dy
-                    val ix = floor(fx).toInt(); val iy = floor(fy).toInt()
-                    for (oy in 0..1) for (ox in 0..1) {
-                        val px = ix + ox; val py = iy + oy
-                        if (MatrixEngine.isInsideMatrix(px, py)) {
-                            val w = (1 - abs(fx - px)) * (1 - abs(fy - py))
-                            val index = py * 13 + px
-                            coverage[index] += w
-                            if (bit == '#') ink[index] += level * w
-                        }
+                    val px = originX + dx; val py = originY + dy
+                    if (MatrixEngine.isInsideMatrix(px, py)) {
+                        if (bit == '#') {
+                            if (opaque) values[py * 13 + px] = level.coerceIn(0, 255)
+                            else put(px, py, level)
+                        } else if (opaque && dx in first..last) values[py * 13 + px] = 0
                     }
                 }
             }
-            values.indices.forEach { i -> values[i] = if (opaque) values[i] * (1 - coverage[i].coerceAtMost(1.0)) + ink[i] else max(values[i], ink[i]) }
         }
-        fun frame() = IntArray(169) { i -> values[i].roundToInt().coerceIn(0, 255).let { if (it < 7) 0 else it } }
+        fun frame() = values
     }
 }

@@ -360,13 +360,12 @@ class MatrixToyService : Service(), SensorEventListener {
         if (event.sensor.type != motionSensor?.type) return
         motionOrientationKnown = true
         screenFacesDown = event.values[2] < -SensorManager.GRAVITY_EARTH * 0.25f
-        val motion = motionFilter.update(
-            event.values[0] / SensorManager.GRAVITY_EARTH,
-            event.values[1] / SensorManager.GRAVITY_EARTH,
-            event.timestamp
-        )
-        tiltX = motion.x
-        tiltY = motion.y
+        val x = (event.values[0] / SensorManager.GRAVITY_EARTH).coerceIn(-1f, 1f)
+        val y = (event.values[1] / SensorManager.GRAVITY_EARTH).coerceIn(-1f, 1f)
+        val motion = motionFilter.update(x, y, event.timestamp)
+        val weatherVisible = config.effect == EffectType.WEATHER || WeatherPreview.state.value.condition != null
+        tiltX = if (weatherVisible) x else motion.x
+        tiltY = if (weatherVisible) y else motion.y
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
