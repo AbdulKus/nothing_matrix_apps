@@ -111,7 +111,6 @@ private fun WeatherGallery(language: AppLanguage, onDismiss: () -> Unit) {
             Column(Modifier.heightIn(max = 550.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 PixelMatrix(preview.frame, Modifier.size(174.dp))
                 Text(if (language == AppLanguage.RU) selected.ru else selected.en, color = Ink, modifier = Modifier.padding(8.dp))
-                Text(language.t("weather_preview_hint"), color = Dim, fontSize = 11.sp, textAlign = TextAlign.Center)
                 Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
                 WeatherCondition.entries.chunked(2).forEach { row ->
                     Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

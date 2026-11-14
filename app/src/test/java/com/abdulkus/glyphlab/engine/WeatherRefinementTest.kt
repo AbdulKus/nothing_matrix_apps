@@ -31,7 +31,7 @@ class WeatherRefinementTest {
                 val frame=WeatherRenderer.render(condition,t,tx,1f)
                 for(x in 0..12) {
                     assertEquals(0,frame[12*13+x])
-                    assertEquals(if(x in 3..9) if(x%2==0)200 else 65 else 0, frame[11*13+x])
+                    assertEquals(if(x in 2..10) if(x%2==0)200 else 65 else 0, frame[11*13+x])
                 }
             }
         }
@@ -124,14 +124,30 @@ class WeatherRefinementTest {
     }
 
     @Test fun windIsAChangingSineWaveWithADimTail() {
-        val gust = WeatherRenderer.WindGust(8, 6.0, 8.0, 2.5, 1.0)
+        val gust = WeatherRenderer.WindGust(8, 12.0, 8.0, 2.5, 1.0)
         val points = WeatherRenderer.windWave(gust, 3.0)
-        assertTrue(points.last().x - points.first().x >= 8)
+        assertEquals((0..12).map { it.toDouble() }, points.map { it.x })
         assertTrue(points.maxOf { it.y } - points.minOf { it.y } > 1.7)
-        assertTrue(points.first().level < points.last().level * 0.15)
-        assertTrue(points.zipWithNext().all { (a, b) -> b.x > a.x && kotlin.math.abs(b.y - a.y) < 0.2 })
+        // The tail remains readable across the screen instead of leaving a short bright hook.
+        assertTrue(points.first().level in 50.0..110.0)
+        assertTrue(points.first().level < points.last().level * 0.5)
+        assertTrue(points.all { it.level >= 50 })
+        assertTrue(points.zipWithNext().all { (a, b) -> b.x > a.x && kotlin.math.abs(b.y - a.y) < 1 })
         val later = WeatherRenderer.windWave(gust, 3.4)
         assertTrue(points.zip(later).any { (a, b) -> kotlin.math.abs(a.y - b.y) > 0.5 })
+    }
+
+    @Test fun windTraceRevealsColumnsThenFadesWithoutMovingThemAsASprite() {
+        fun trace(head: Double, opacity: Double = 1.0) = WeatherRenderer.windWave(
+            WeatherRenderer.WindGust(8, head - 2, 8.0, 2.5, opacity), 3.0)
+        val entering = trace(4.0)
+        val crossed = trace(14.0)
+        assertTrue(entering.filter { it.x <= 4 }.all { it.level > 0 })
+        assertTrue(entering.filter { it.x > 4 }.all { it.level == 0.0 })
+        assertEquals(entering.map { it.y }, crossed.map { it.y })
+        assertTrue(crossed.all { it.level > 50 })
+        val faded = trace(14.0, 0.25)
+        crossed.zip(faded).forEach { (a, b) -> assertEquals(a.level * 0.25, b.level, 0.001) }
     }
 
     @Test fun windGustsTravelWithFadingTailsAtDifferentHeightsOneOrTwoAtATime() {
@@ -166,5 +182,19 @@ class WeatherRefinementTest {
             frame.indices.filter { it/13>=7 && frame[it]>0 }.map { it%13 }
         }.toSet()
         assertTrue(columns.size>=9)
+    }
+
+    @Test fun fogHasFiveStripesAcrossTheMatrixAndIceOccupiesEntireRow11() {
+        val fogFrame = WeatherRenderer.render(WeatherCondition.FOG, 0.0)
+        val fogRows = (0..12).filter { y -> (0..12).any { x -> fogFrame[y * 13 + x] > 0 } }.toSet()
+        assertEquals(setOf(2, 4, 6, 8, 10), fogRows)
+        for (y in setOf(2, 4, 6, 8, 10)) {
+            val litCols = (0..12).filter { x -> fogFrame[y * 13 + x] > 0 }
+            assertTrue("Row $y should have at least 7 lit pixels", litCols.size >= 7)
+        }
+
+        val rimeFrame = WeatherRenderer.render(WeatherCondition.RIME_FOG, 0.0)
+        val iceCols = (0..12).filter { x -> rimeFrame[11 * 13 + x] > 0 }
+        assertEquals((2..10).toList(), iceCols)
     }
 }

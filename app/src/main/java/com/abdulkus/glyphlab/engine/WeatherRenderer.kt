@@ -37,13 +37,20 @@ object WeatherRenderer {
                 cloud(c, 1.7 - sin(t * 0.4) * 0.6 + objectX, 1.0 + verticalDrift(t + 6), 85)
                 cloud(c, 2.8 + sin(t * 0.5) * 0.65 + objectX, 6.0 + verticalDrift(t), 235)
             }
-            WeatherCondition.FOG, WeatherCondition.RIME_FOG -> {
+            WeatherCondition.FOG -> {
+                for (row in 0..4) {
+                    val y = 2.0 + row * 2 + objectY
+                    val offset = sin(t * 0.65 + row * 1.5) * 0.8 + objectX
+                    for (x in 2..10) if (x != 4 + row) c.dot(x + offset, y, if (row == 2) 205.0 else if (row in 1..3) 160.0 else 115.0)
+                }
+            }
+            WeatherCondition.RIME_FOG -> {
                 for (row in 0..2) {
                     val y = 4.0 + row * 2 + objectY
                     val offset = sin(t * 0.65 + row * 2) * 0.8 + objectX
                     for (x in 2..10) if (x != 4 + row) c.dot(x + offset, y, if (row == 1) 205.0 else 120.0)
                 }
-                if (condition == WeatherCondition.RIME_FOG) ice(c)
+                ice(c)
             }
             WeatherCondition.WIND -> wind(c, t, tx, ty)
             WeatherCondition.UNKNOWN -> c.stamp(4.0, 4.0, listOf(".###.", "#...#", "...#.", "..#..", ".....", "..#.."), 150)
@@ -219,7 +226,7 @@ object WeatherRenderer {
             (ex - sx) / length, (ey - sy) / length, progress, sx, sy, ex, ey)
     }
 
-    private fun ice(c: Canvas) { for (x in 3..9) c.dot(x.toDouble(), 11.0, if (x % 2 == 0) 200.0 else 65.0) }
+    private fun ice(c: Canvas) { for (x in 2..10) c.dot(x.toDouble(), 11.0, if (x % 2 == 0) 200.0 else 65.0) }
 
     internal fun displacement(tilt: Double): Double = when {
         tilt >= 0.875 -> 2.0; tilt >= 0.5 -> 1.0
@@ -284,12 +291,16 @@ object WeatherRenderer {
 
     internal fun windWave(gust: WindGust, t: Double): List<WindPoint> {
         val phase = random(gust.id, 389) * PI * 2
-        return (0..36).map { step ->
-            val u = step / 36.0
-            val x = gust.x - 7 + u * 9
-            // Phase travels through the moving envelope, so this is not a translated sprite.
-            val y = gust.y + sin(x * 0.72 - t * 2.2 + phase) * 0.95
-            WindPoint(x, y, (20 + 210 * u.pow(1.25)) * gust.opacity)
+        val head = gust.x + 2
+        return (0..12).map { column ->
+            val x = column.toDouble()
+            val behind = head - x
+            // A travelling trace sweeps across fixed columns, leaving a long phosphor-like tail.
+            // Do not crop a short moving piece out of the sine: it reads as a flying glyph.
+            val reveal = (behind + 1).coerceIn(0.0, 1.0)
+            val tail = exp(-behind.coerceAtLeast(0.0) / 12)
+            val y = gust.y + sin(x * (2 * PI / 9) - t * 1.4 + phase) * 1.2
+            WindPoint(x, y, 230 * reveal * tail * gust.opacity)
         }
     }
 
@@ -308,8 +319,9 @@ object WeatherRenderer {
 
     private fun wind(c: Canvas, t: Double, tx: Double, ty: Double) {
         windGusts(t).forEach { gust ->
-            windWave(gust, t).zipWithNext().forEach { (a, b) ->
-                c.line(a.x + tx * 0.4, a.y + ty * 0.3, b.x + tx * 0.4, b.y + ty * 0.3, b.level)
+            windWave(gust, t).forEach { point ->
+                // Exactly one crisp point per column; dense short segments can thicken corners.
+                c.dot(point.x + tx * 0.4, point.y + ty * 0.3, point.level)
             }
         }
         // The user's small cloud is a foreground layer with a birth height of 1–3 pixels.
