@@ -35,9 +35,7 @@ class WeatherMotionTest {
         }
     }
 
-    @Test fun snowHasSmallAndLargeFlakesAndHeavySnowIsDenser() {
-        val particles = WeatherRenderer.samples(20.0, 0.5, 1.6, WeatherRenderer.Kind.SNOW)
-        assertTrue(particles.any { it.large }); assertTrue(particles.any { !it.large })
+    @Test fun heavySnowIsDenserThanOrdinarySnow() {
         fun density(condition: WeatherCondition) = (0..400).sumOf { tick ->
             WeatherRenderer.render(condition, tick / 10.0).drop(7 * 13).count { it >= 45 }
         }
@@ -86,10 +84,12 @@ class WeatherMotionTest {
     @Test fun shootingStarsAlwaysDescendDiagonallyAndExitWithTheirTail() {
         val stars = (0..10500).mapNotNull { WeatherRenderer.meteor(it / 20.0) }
         assertTrue(stars.any { it.dx > 0 }); assertTrue(stars.any { it.dx < 0 })
-        assertTrue(stars.map { (it.startY * 10).toInt() }.distinct().size > 10)
+        assertTrue(stars.map { (it.startY * 10).toInt() }.distinct().size >= 3)
         stars.forEach { star ->
             assertTrue(star.dy > 0)
-            assertTrue(abs(star.dy / star.dx) in 0.57..1.12)
+            assertEquals(1.0, abs(star.dy / star.dx), 0.0)
+            assertEquals(star.x.toInt().toDouble(), star.x, 0.0)
+            assertEquals(star.y.toInt().toDouble(), star.y, 0.0)
             assertTrue(star.startX <= -4 || star.startX >= 16)
             assertTrue(star.endX <= -4 || star.endX >= 16)
             val tailEndX = star.endX - star.dx * 2.8

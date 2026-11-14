@@ -23,6 +23,7 @@ import com.abdulkus.glyphlab.data.EffectType
 import com.abdulkus.glyphlab.data.ConfigStore
 import com.abdulkus.glyphlab.data.MatrixConfig
 import com.abdulkus.glyphlab.engine.ClockTransitionRenderer
+import com.abdulkus.glyphlab.engine.SensorTilt
 import com.abdulkus.glyphlab.engine.TiltFilter
 import com.abdulkus.glyphlab.engine.FramePacer
 import com.abdulkus.glyphlab.weather.WeatherPreview
@@ -360,8 +361,7 @@ class MatrixToyService : Service(), SensorEventListener {
         if (event.sensor.type != motionSensor?.type) return
         motionOrientationKnown = true
         screenFacesDown = event.values[2] < -SensorManager.GRAVITY_EARTH * 0.25f
-        val x = (event.values[0] / SensorManager.GRAVITY_EARTH).coerceIn(-1f, 1f)
-        val y = (event.values[1] / SensorManager.GRAVITY_EARTH).coerceIn(-1f, 1f)
+        val (x, y) = SensorTilt.fromAndroid(event.values[0], event.values[1])
         val motion = motionFilter.update(x, y, event.timestamp)
         val weatherVisible = config.effect == EffectType.WEATHER || WeatherPreview.state.value.condition != null
         tiltX = if (weatherVisible) x else motion.x

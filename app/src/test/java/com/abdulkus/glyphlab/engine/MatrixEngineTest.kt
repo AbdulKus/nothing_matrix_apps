@@ -77,6 +77,10 @@ class MatrixEngineTest {
         }
 
         assertTrue(verticalCenter(renderWithTilt(-0.8f)) > verticalCenter(renderWithTilt(0.8f)))
+        // Exercise the same Android sensor mapping used by the live and AOD paths.
+        val positiveSensorY = SensorTilt.fromAndroid(0f, 7.84532f).y
+        val negativeSensorY = SensorTilt.fromAndroid(0f, -7.84532f).y
+        assertTrue(verticalCenter(renderWithTilt(positiveSensorY)) > verticalCenter(renderWithTilt(negativeSensorY)))
     }
 
     @Test
@@ -110,6 +114,9 @@ class MatrixEngineTest {
         }
 
         assertTrue(horizontalCenter(renderWithTilt(0.9f)) > horizontalCenter(renderWithTilt(-0.9f)))
+        val positiveSensorX = SensorTilt.fromAndroid(8.825985f, 0f).x
+        val negativeSensorX = SensorTilt.fromAndroid(-8.825985f, 0f).x
+        assertTrue(horizontalCenter(renderWithTilt(positiveSensorX)) < horizontalCenter(renderWithTilt(negativeSensorX)))
     }
 
     @Test
