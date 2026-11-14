@@ -13,8 +13,10 @@ internal enum class MatrixOutputMode {
 internal fun resolveMatrixOutputMode(
     config: MatrixConfig,
     isInteractive: Boolean,
-    isDeviceLocked: Boolean
+    isDeviceLocked: Boolean,
+    weatherPreviewActive: Boolean = false
 ): MatrixOutputMode {
+    if (weatherPreviewActive) return MatrixOutputMode.EFFECT
     if (config.effect == EffectType.CLOCK) {
         val lockedOrAsleep = isDeviceLocked || !isInteractive
         return if (!config.clockLockScreenOnly || lockedOrAsleep) {

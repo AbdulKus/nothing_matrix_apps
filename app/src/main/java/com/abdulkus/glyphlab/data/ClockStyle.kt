@@ -10,6 +10,5 @@ enum class ClockFont(val ru: String, val en: String, val width: Int) {
 
 enum class ClockLayout(val ru: String, val en: String) {
     STACKED("Две строки", "Two rows"),
-    HORIZON("Горизонт", "Horizon"),
     ANALOG("Циферблат", "Analog dial")
 }

@@ -10,7 +10,7 @@ import java.io.File
 
 class WeatherClockTest {
     @Test fun everyWmoConditionHasAnExplicitSceneAndPrecipitationWinsOverWind() {
-        val supported = listOf(0, 1, 2, 3, 45, 48, 51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 71, 73, 75, 77, 80, 81, 82, 85, 86, 95, 96, 99)
+        val supported = listOf(0, 1, 2, 3, 45, 48, 51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 71, 73, 75, 77, 80, 81, 82, 85, 86, 95, 96, 97, 99)
         supported.forEach { code ->
             listOf(true, false).forEach { day -> assertNotEquals("WMO $code", WeatherCondition.UNKNOWN, WeatherCondition.fromWmo(code, day)) }
         }
@@ -19,6 +19,17 @@ class WeatherClockTest {
         assertEquals(WeatherCondition.WIND, WeatherCondition.fromWmo(3, true, 40.0))
         assertEquals(WeatherCondition.HEAVY_RAIN, WeatherCondition.fromWmo(65, true, 70.0))
         assertEquals(WeatherCondition.SLEET, WeatherCondition.fromWmo(73, true, temperature = 1.0, rain = 0.2, snowfall = 0.1))
+        assertEquals(WeatherCondition.SLEET, WeatherCondition.fromWmo(63, true, temperature = 1.0, rain = 0.4, snowfall = 0.2))
+        assertEquals(WeatherCondition.HEAVY_THUNDERSTORM, WeatherCondition.fromWmo(97, true, temperature = 1.0, rain = 0.4, snowfall = 0.2))
+        assertEquals(29, supported.size)
+        assertEquals(WeatherCondition.HEAVY_THUNDERSTORM, WeatherCondition.fromWmo(97, true))
+        assertEquals(WeatherCondition.THUNDERSTORM_HAIL, WeatherCondition.fromWmo(96, false))
+        assertEquals(WeatherCondition.THUNDERSTORM_HAIL, WeatherCondition.fromWmo(99, true))
+        assertEquals(WeatherCondition.RIME_FOG, WeatherCondition.fromWmo(48, true))
+        assertEquals(WeatherCondition.FREEZING_DRIZZLE, WeatherCondition.fromWmo(57, true))
+        assertEquals(WeatherCondition.SNOW_GRAINS, WeatherCondition.fromWmo(77, true))
+        assertEquals(WeatherCondition.SNOW_SHOWERS, WeatherCondition.fromWmo(85, true))
+        assertEquals(WeatherCondition.SHOWERS, WeatherCondition.fromWmo(81, true))
         assertEquals(WeatherCondition.UNKNOWN, WeatherCondition.fromWmo(123, true))
     }
 
@@ -31,7 +42,7 @@ class WeatherClockTest {
 
     @Test fun weatherSilhouettesStayVisibleSparseAndAnimateWithoutLightingTheMaskCorners() {
         WeatherCondition.entries.forEach { condition ->
-            val frames = (0..80).map { WeatherRenderer.render(condition, it / 10.0) }
+            val frames = (0..360).map { WeatherRenderer.render(condition, it / 10.0) }
             frames.forEach { frame ->
                 assertEquals(169, frame.size)
                 assertTrue("$condition needs a sparse silhouette", frame.count { it > 0 } in 7..65)
@@ -66,13 +77,13 @@ class WeatherClockTest {
         val classic = cache.frame(time)
         val wide = cache.frame(time, font = ClockFont.WIDE)
         assertFalse(classic.contentEquals(wide))
-        assertNotSame(wide, cache.frame(time, font = ClockFont.WIDE, layout = ClockLayout.HORIZON))
+        assertNotSame(wide, cache.frame(time, font = ClockFont.WIDE, layout = ClockLayout.ANALOG))
     }
 
     @Test fun exportActualRendererFramesForVisualReview() {
         fun frameJson(frame: IntArray) = frame.joinToString(",", "[", "]")
         val weather = WeatherCondition.entries.joinToString(",") { c ->
-            "{\"name\":\"${c.ru}\",\"frames\":[" + (0 until 80).joinToString(",") { frameJson(WeatherRenderer.render(c, it / 10.0)) } + "]}"
+            "{\"name\":\"${c.ru}\",\"frames\":[" + (0 until 360).joinToString(",") { frameJson(WeatherRenderer.render(c, it / 10.0)) } + "]}"
         }
         val clocks = ClockFont.entries.joinToString(",") { font ->
             "{\"name\":\"${font.ru}\",\"frames\":[" + listOf(12 to 34, 20 to 58, 9 to 16).joinToString(",") { (h, m) -> frameJson(ClockRenderer.renderTime(h, m, font, ClockLayout.STACKED)) } + "]}"
@@ -80,6 +91,12 @@ class WeatherClockTest {
         val layouts = ClockLayout.entries.joinToString(",") { layout ->
             "{\"name\":\"${layout.ru}\",\"frames\":[${frameJson(ClockRenderer.renderTime(12, 34, ClockFont.WIDE, layout))}]}"
         }
-        File("build/reports/matrix-review/frames.json").apply { parentFile?.mkdirs(); writeText("{\"weather\":[$weather],\"clocks\":[$clocks],\"layouts\":[$layouts]}") }
+        val tilted = listOf(WeatherCondition.RAIN, WeatherCondition.CLOUDY, WeatherCondition.SLEET,
+            WeatherCondition.HEAVY_SNOW, WeatherCondition.HAIL, WeatherCondition.WIND).flatMap { condition ->
+            listOf(-1f, 0f, 1f).map { tilt ->
+                "{\"name\":\"${condition.ru} · ${if (tilt < 0) "влево" else if (tilt > 0) "вправо" else "без наклона"}\",\"frames\":[${frameJson(WeatherRenderer.render(condition, 2.0, tilt))}]}"
+            }
+        }.joinToString(",")
+        File("build/reports/matrix-review/frames.json").apply { parentFile?.mkdirs(); writeText("{\"weather\":[$weather],\"clocks\":[$clocks],\"layouts\":[$layouts],\"tilt\":[$tilted]}") }
     }
 }

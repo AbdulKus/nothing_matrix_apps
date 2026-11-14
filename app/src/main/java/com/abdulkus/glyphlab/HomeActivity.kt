@@ -610,19 +610,18 @@ private fun SettingsPanel(language: AppLanguage, config: MatrixConfig, onChange:
         }
 
         if (config.effect != EffectType.CLOCK) {
-            if (config.effect != EffectType.WEATHER) {
-                ToggleRow(language.t("accelerometer"), config.accelerometer) { onChange(config.copy(accelerometer = it)) }
-                if (config.accelerometer) {
-                    ConfigSlider(language.t("tilt_response"), config.sensorStrength, { "${(it * 100).roundToInt()}%" }) {
-                        onChange(config.copy(sensorStrength = it))
-                    }
+            ToggleRow(language.t("accelerometer"), config.accelerometer) { onChange(config.copy(accelerometer = it)) }
+            if (config.accelerometer) {
+                ConfigSlider(language.t("tilt_response"), config.sensorStrength, { "${(it * 100).roundToInt()}%" }) {
+                    onChange(config.copy(sensorStrength = it))
                 }
             }
+
             Spacer(Modifier.height(8.dp))
-            Label(language.t("frame_rate"))
-            ChoiceRow(items = listOf(12, 18, 24, 30), selected = config.frameRate, title = { "$it" }) {
-                onChange(config.copy(frameRate = it))
-            }
+        }
+        Label(language.t("frame_rate"))
+        ChoiceRow(items = com.abdulkus.glyphlab.engine.FramePacer.OPTIONS, selected = config.frameRate, title = { "$it" }) {
+            onChange(config.copy(frameRate = it))
         }
 
         Spacer(Modifier.height(18.dp))

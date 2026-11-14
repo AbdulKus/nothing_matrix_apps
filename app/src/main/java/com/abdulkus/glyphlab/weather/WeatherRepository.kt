@@ -101,7 +101,7 @@ class WeatherRepository private constructor(context: Context) {
         lastAttempt = System.currentTimeMillis()
         _state.value = _state.value.copy(loading = true, message = null)
         try {
-            val url = URL("https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=weather_code,is_day,temperature_2m,wind_speed_10m,rain,snowfall&timeformat=unixtime&forecast_days=1")
+            val url = URL("https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=weather_code,is_day,temperature_2m,wind_speed_10m,rain,showers,snowfall&timeformat=unixtime&forecast_days=1")
             val connection = url.openConnection() as HttpURLConnection
             val body = try {
                 connection.connectTimeout = 10_000
@@ -129,7 +129,7 @@ class WeatherRepository private constructor(context: Context) {
     private fun parse(json: JSONObject) = WeatherSnapshot(
         observedAt = json.getLong("time") * 1000,
         condition = WeatherCondition.fromWmo(json.getInt("weather_code"), json.getInt("is_day") == 1,
-            json.getDouble("wind_speed_10m"), json.getDouble("temperature_2m"), json.getDouble("rain"), json.getDouble("snowfall")),
+            json.getDouble("wind_speed_10m"), json.getDouble("temperature_2m"), json.getDouble("rain") + json.optDouble("showers", 0.0), json.getDouble("snowfall")),
         temperature = json.getDouble("temperature_2m")
     )
 

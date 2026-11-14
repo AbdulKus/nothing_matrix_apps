@@ -417,27 +417,26 @@ private fun SettingsPanel(config: MatrixConfig, onChange: (MatrixConfig) -> Unit
             )
         }
         if (config.effect != EffectType.CLOCK) {
-            if (config.effect != EffectType.WEATHER) {
-                ToggleRow("Акселерометр", config.accelerometer) {
-                    onChange(config.copy(accelerometer = it))
-                }
-                if (config.accelerometer) {
-                    ConfigSlider(
-                        "РЕАКЦИЯ НА НАКЛОН",
-                        config.sensorStrength,
-                        { "${(it * 100).roundToInt()}%" }
-                    ) { onChange(config.copy(sensorStrength = it)) }
-                }
-
-                Spacer(Modifier.height(8.dp))
+            ToggleRow("Акселерометр", config.accelerometer) {
+                onChange(config.copy(accelerometer = it))
             }
-            Label("ЧАСТОТА КАДРОВ")
-            ChoiceRow(
-                items = listOf(12, 18, 24, 30),
-                selected = config.frameRate,
-                title = { "$it" }
-            ) { onChange(config.copy(frameRate = it)) }
+            if (config.accelerometer) {
+                ConfigSlider(
+                    "РЕАКЦИЯ НА НАКЛОН",
+                    config.sensorStrength,
+                    { "${(it * 100).roundToInt()}%" }
+                ) { onChange(config.copy(sensorStrength = it)) }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
         }
+        Label("ЧАСТОТА КАДРОВ")
+        ChoiceRow(
+            items = com.abdulkus.glyphlab.engine.FramePacer.OPTIONS,
+            selected = config.frameRate,
+            title = { "$it" }
+        ) { onChange(config.copy(frameRate = it)) }
 
         Spacer(Modifier.height(18.dp))
         ClockSettings(config, onChange)

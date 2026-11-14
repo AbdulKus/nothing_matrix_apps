@@ -35,8 +35,7 @@ object ClockRenderer {
         } else {
             val x = (13 - (font.width * 2 + 1)) / 2
             pair(f, hour, x, 1, font, 255)
-            pair(f, minute, x, 7, font, if (layout == ClockLayout.HORIZON) 185 else 255)
-            if (layout == ClockLayout.HORIZON) for (dx in 4..8) put(f, dx, 6, 65)
+            pair(f, minute, x, 7, font, 255)
         }
         return f
     }

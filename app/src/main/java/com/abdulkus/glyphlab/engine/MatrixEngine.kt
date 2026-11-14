@@ -49,7 +49,7 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
             EffectType.PLASMA -> renderPlasma(config, time, sensorX, sensorY)
             EffectType.STARFIELD -> renderStarfield(config, dt, sensorX, sensorY)
             EffectType.CLOCK -> ClockRenderer.render(font = config.clockFont, layout = config.clockLayout)
-            EffectType.WEATHER -> WeatherRenderer.render(weather, time * config.speed * 2)
+            EffectType.WEATHER -> WeatherRenderer.render(weather, time * config.speed * 2, sensorX, sensorY)
         }
 
         val brightness = config.brightness.coerceIn(0f, 1f)

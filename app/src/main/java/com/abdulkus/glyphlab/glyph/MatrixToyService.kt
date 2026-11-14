@@ -22,6 +22,8 @@ import com.abdulkus.glyphlab.data.AutoBrightnessSource
 import com.abdulkus.glyphlab.data.EffectType
 import com.abdulkus.glyphlab.data.ConfigStore
 import com.abdulkus.glyphlab.data.MatrixConfig
+import com.abdulkus.glyphlab.engine.FramePacer
+import com.abdulkus.glyphlab.weather.WeatherPreview
 import com.abdulkus.glyphlab.weather.WeatherCondition
 import com.abdulkus.glyphlab.weather.WeatherRepository
 import com.abdulkus.glyphlab.engine.MatrixEngine
@@ -209,6 +211,7 @@ class MatrixToyService : Service(), SensorEventListener {
     private fun ensureRenderLoop() {
         if (renderJob?.isActive == true) return
         renderJob = scope.launch {
+            val pacer = FramePacer()
             while (isActive) {
                 config = configStore.load()
                 val current = config
@@ -230,14 +233,15 @@ class MatrixToyService : Service(), SensorEventListener {
                     lastClockHardwareFrame = hardwareFrame
                 }
                 if (lowPowerOutput) {
+                    pacer.reset()
                     val waitMillis = if (automaticBrightnessIsMoving(current)) {
-                        CLOCK_BRIGHTNESS_STEP_MS
+                        FramePacer.brightnessStepMillis(current.frameRate)
                     } else {
                         CLOCK_IDLE_POLL_MS
                     }
                     withTimeoutOrNull(waitMillis) { brightnessWake.receive() }
                 } else {
-                    delay(1000L / current.frameRate.coerceIn(8, 18))
+                    delay(pacer.delayMillis(current.frameRate))
                 }
             }
         }
@@ -282,8 +286,13 @@ class MatrixToyService : Service(), SensorEventListener {
         MatrixOutputMode.CLOCK -> clockFrames.frame(masterBrightness = current.brightness, font = current.clockFont, layout = current.clockLayout)
         MatrixOutputMode.OFF -> OFF_FRAME
         MatrixOutputMode.EFFECT -> {
-            if (current.effect == EffectType.WEATHER) weather.refreshIfNeeded()
-            engine.render(current, System.nanoTime(), tiltX, tiltY, weather.state.value.snapshot?.currentCondition() ?: WeatherCondition.UNKNOWN)
+            val preview = WeatherPreview.state.value.condition
+            if (current.effect == EffectType.WEATHER && preview == null) weather.refreshIfNeeded()
+            val effective = if (preview == null) current else current.copy(effect = EffectType.WEATHER)
+            engine.render(effective, System.nanoTime(), tiltX, tiltY,
+                preview ?: weather.state.value.snapshot?.currentCondition() ?: WeatherCondition.UNKNOWN).also {
+                if (preview != null) WeatherPreview.publish(preview, it)
+            }
         }
     }
 
@@ -291,7 +300,8 @@ class MatrixToyService : Service(), SensorEventListener {
         resolveMatrixOutputMode(
             config = current,
             isInteractive = powerManager.isInteractive,
-            isDeviceLocked = keyguardManager.isDeviceLocked
+            isDeviceLocked = keyguardManager.isDeviceLocked,
+            weatherPreviewActive = WeatherPreview.state.value.condition != null
         )
 
     private fun unregisterScreenReceiver() {
@@ -351,7 +361,6 @@ class MatrixToyService : Service(), SensorEventListener {
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
     private companion object {
-        const val CLOCK_BRIGHTNESS_STEP_MS = 1000L / 24L
         const val CLOCK_IDLE_POLL_MS = 1_000L
         val OFF_FRAME = IntArray(MatrixEngine.PIXEL_COUNT)
     }

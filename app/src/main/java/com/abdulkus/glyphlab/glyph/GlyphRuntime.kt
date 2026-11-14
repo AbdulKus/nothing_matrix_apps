@@ -11,6 +11,8 @@ import com.abdulkus.glyphlab.data.AutoBrightnessSource
 import com.abdulkus.glyphlab.data.ConfigStore
 import com.abdulkus.glyphlab.data.EffectType
 import com.abdulkus.glyphlab.data.MatrixConfig
+import com.abdulkus.glyphlab.engine.FramePacer
+import com.abdulkus.glyphlab.weather.WeatherPreview
 import com.abdulkus.glyphlab.weather.WeatherCondition
 import com.abdulkus.glyphlab.weather.WeatherRepository
 import com.abdulkus.glyphlab.engine.MatrixEngine
@@ -103,19 +105,27 @@ class GlyphRuntime(context: Context) : SensorEventListener {
 
         if (loop == null) {
             loop = scope.launch {
+                val pacer = FramePacer()
+                var previewWasActive = false
                 while (isActive) {
-                    val current = config
+                    val preview = WeatherPreview.state.value.condition
+                    val current = if (preview == null) config else config.copy(effect = EffectType.WEATHER)
                     val clockVisible = current.effect == EffectType.CLOCK
                     if (!clockVisible) lastClockHardwareFrame = null
                     val next = if (clockVisible) {
                         clockFrames.frame(masterBrightness = current.brightness, font = current.clockFont, layout = current.clockLayout)
                     } else {
-                        if (current.effect == EffectType.WEATHER) weather.refreshIfNeeded()
-                        engine.render(current, System.nanoTime(), tiltX, tiltY, weather.state.value.snapshot?.currentCondition() ?: WeatherCondition.UNKNOWN)
+                        if (current.effect == EffectType.WEATHER && preview == null) weather.refreshIfNeeded()
+                        engine.render(current, System.nanoTime(), tiltX, tiltY, preview ?: weather.state.value.snapshot?.currentCondition() ?: WeatherCondition.UNKNOWN)
                     }
                     _frame.value = next
+                    if (preview != null) WeatherPreview.publish(preview, next)
+                    if (previewWasActive && preview == null && !outputEnabled) {
+                        withContext(Dispatchers.Main.immediate) { runCatching { manager?.closeAppMatrix() } }
+                    }
+                    previewWasActive = preview != null
                     val automatic = automaticScale(current)
-                    if (outputEnabled && _connection.value == GlyphConnection.CONNECTED) {
+                    if ((outputEnabled || preview != null) && _connection.value == GlyphConnection.CONNECTED) {
                         val hardwareFrame = HardwareFrameMapper.forGlyph(
                             next,
                             current.brightness,
@@ -131,14 +141,15 @@ class GlyphRuntime(context: Context) : SensorEventListener {
                         }
                     }
                     if (clockVisible) {
+                        pacer.reset()
                         val waitMillis = if (automaticBrightnessIsMoving(current)) {
-                            CLOCK_BRIGHTNESS_STEP_MS
+                            FramePacer.brightnessStepMillis(current.frameRate)
                         } else {
                             CLOCK_IDLE_POLL_MS
                         }
                         withTimeoutOrNull(waitMillis) { brightnessWake.receive() }
                     } else {
-                        delay(1000L / current.frameRate.coerceIn(8, 30))
+                        delay(pacer.delayMillis(current.frameRate))
                     }
                 }
             }
@@ -157,6 +168,7 @@ class GlyphRuntime(context: Context) : SensorEventListener {
     }
 
     fun stop() {
+        WeatherPreview.clear()
         outputEnabled = false
         lastReliableLux?.let { configStore.saveAmbientLux(it) }
         sensorManager.unregisterListener(this)
@@ -211,7 +223,6 @@ class GlyphRuntime(context: Context) : SensorEventListener {
     }
 
     private companion object {
-        const val CLOCK_BRIGHTNESS_STEP_MS = 1000L / 24L
         const val CLOCK_IDLE_POLL_MS = 1_000L
     }
 }

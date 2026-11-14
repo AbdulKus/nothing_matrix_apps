@@ -84,7 +84,7 @@ fun WeatherSettings(language: AppLanguage) {
             Text(language.t(if (state.loading) "weather_loading" else "weather_locate"), fontSize = 12.sp)
         }
         OutlinedButton(onClick = { showGallery = true }, modifier = Modifier.fillMaxWidth()) {
-            Text(language.t("weather_gallery"), fontSize = 12.sp)
+            Text(language.t("weather_gallery").replace("{count}", WeatherCondition.entries.size.toString()), fontSize = 12.sp)
         }
     }
     if (showGallery) WeatherGallery(language) { showGallery = false }
@@ -94,16 +94,22 @@ fun WeatherSettings(language: AppLanguage) {
 private fun WeatherGallery(language: AppLanguage, onDismiss: () -> Unit) {
     var selected by remember { mutableStateOf(WeatherCondition.SUNNY) }
     var seconds by remember { mutableDoubleStateOf(0.0) }
+    val preview by WeatherPreview.state.collectAsState()
+    DisposableEffect(Unit) {
+        WeatherPreview.show(selected)
+        onDispose { WeatherPreview.clear() }
+    }
+    LaunchedEffect(selected) { WeatherPreview.show(selected) }
     LaunchedEffect(Unit) {
         val start = System.nanoTime()
         while (true) { seconds = (System.nanoTime() - start) / 1e9; delay(100) }
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(language.t("weather_gallery"), fontSize = 17.sp) },
+        title = { Text(language.t("weather_gallery").replace("{count}", WeatherCondition.entries.size.toString()), fontSize = 17.sp) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
-                PixelMatrix(WeatherRenderer.render(selected, seconds), Modifier.size(174.dp))
+                PixelMatrix(preview.frame, Modifier.size(174.dp))
                 Text(if (language == AppLanguage.RU) selected.ru else selected.en, color = Ink, modifier = Modifier.padding(8.dp))
                 Text(language.t("weather_preview_hint"), color = Dim, fontSize = 11.sp, textAlign = TextAlign.Center)
                 WeatherCondition.entries.chunked(2).forEach { row ->

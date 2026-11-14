@@ -4,13 +4,17 @@
 HTML is self contained. Optional PNG contact sheets require Pillow.
 """
 import json
+import base64
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / 'app/build/reports/matrix-review'
 data = json.loads((OUTPUT / 'frames.json').read_text())
-# Hex encodes each LED exactly in two chars, so the report stays small.
-packed = {group: [dict(name=item['name'], frames=[''.join(f'{v:02x}' for v in frame) for frame in item['frames']])
+# Store only lit LEDs: the 36-second review remains compact and lossless.
+def encode(frame):
+    return base64.b64encode(bytes(v for i, level in enumerate(frame) if level for v in (i, level))).decode('ascii')
+
+packed = {group: [dict(name=item['name'], frames=[encode(frame) for frame in item['frames']])
                   for item in items] for group, items in data.items()}
 markup = '''<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body>
@@ -21,48 +25,65 @@ markup = '''<!doctype html>
 #matrix-review canvas {display:block;width:100%;max-width:150px;aspect-ratio:1;margin:0 auto 6px;border-radius:50%;background:#000}
 #matrix-review h3 {margin:12px 0;font-size:inherit;font-weight:500}
 #matrix-review button {font:inherit;color:var(--foreground);background:var(--secondary);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px}
+#matrix-review .review-controls {display:flex;align-items:center;flex-wrap:wrap;gap:12px}
 #matrix-review figcaption {font-size:12px}
 </style>
 <div id="matrix-review">
-<button id="pause-matrix" type="button">Пауза</button>
-<h3>Погода · 13×13, 137 диодов</h3><div class="samples" id="weather-samples"></div>
-<h3>Шрифты · 12:34 / 20:58 / 09:16</h3><div class="samples" id="clock-samples"></div>
-<h3>Оформление · 12:34</h3><div class="samples" id="layout-samples"></div>
+<div class="review-controls"><button id="pause-matrix" type="button">Пауза</button>
+<label>Момент <input id="matrix-time" type="range" min="0" max="359" value="0" aria-label="Момент анимации"></label>
+<output id="matrix-seconds">0.0 с</output></div>
+<div id="matrix-sections"></div>
 </div>
 <script>
 const matrixData = __DATA__;
 const rowWidths = [5,9,11,11,13,13,13,13,13,11,11,9,5];
 const samples=[];
-for (const [group, target] of [['weather','weather-samples'],['clocks','clock-samples'],['layouts','layout-samples']]) {
-  const parent=document.getElementById(target);
+for (const [group, title] of [['weather','Погода · 13×13, 137 диодов'],['clocks','Шрифты · 12:34 / 20:58 / 09:16'],['layouts','Оформление · 12:34']]) {
+  if(!matrixData[group]?.length) continue;
+  const section=document.getElementById('matrix-sections');
+  const heading=document.createElement('h3');heading.textContent=title;
+  const parent=document.createElement('div');parent.className='samples';section.append(heading,parent);
   for(const item of matrixData[group]) {
     const fig=document.createElement('figure');
     const canvas=document.createElement('canvas'); canvas.width=156;canvas.height=156;
     canvas.setAttribute('role','img');canvas.setAttribute('aria-label',item.name);
     const caption=document.createElement('figcaption');caption.textContent=item.name;
     fig.append(canvas,caption);parent.append(fig);
-    samples.push({canvas,group,frames:item.frames});
+    const frames=item.frames.map(encoded=>{
+      const frame=new Uint8Array(169), bytes=atob(encoded);
+      for(let i=0;i<bytes.length;i+=2)frame[bytes.charCodeAt(i)]=bytes.charCodeAt(i+1);
+      return frame;
+    });
+    samples.push({canvas,group,frames});
   }
 }
 let paused=matchMedia('(prefers-reduced-motion: reduce)').matches, tick=0;
 const button=document.getElementById('pause-matrix');
+const timeline=document.getElementById('matrix-time'), seconds=document.getElementById('matrix-seconds');
 function label(){button.textContent=paused?'Продолжить':'Пауза';button.setAttribute('aria-pressed',String(paused));}
 button.onclick=()=>{paused=!paused;label();};label();
+timeline.oninput=()=>{paused=true;tick=Number(timeline.value);label();draw();};
 function draw(){
+ timeline.value=String(tick%360);seconds.textContent=`${((tick%360)/10).toFixed(1)} с`;
  for(const {canvas,group,frames} of samples){
   const f=frames[(group==='weather'?tick:Math.floor(tick/25))%frames.length];
   const ctx=canvas.getContext('2d');ctx.clearRect(0,0,156,156);
   for(let y=0;y<13;y++)for(let x=0;x<13;x++){
    if(Math.abs(x-6)>(rowWidths[y]-1)/2)continue;
-   const value=parseInt(f.slice((y*13+x)*2,(y*13+x+1)*2),16);
+   const value=f[y*13+x];
    const level=Math.round(20+value*0.88);ctx.fillStyle=`rgb(${level},${level},${level})`;
    ctx.beginPath();ctx.arc((x+.5)*12,(y+.5)*12,3.48,0,Math.PI*2);ctx.fill();
   }
  }
 }
 draw();setInterval(()=>{if(!paused){tick++;draw();}},100);
-</script></body></html>'''.replace('__DATA__', json.dumps(packed, ensure_ascii=False, separators=(',', ':')))
-(OUTPUT / 'matrix-review.html').write_text(markup)
+</script></body></html>'''
+(OUTPUT / 'matrix-review.html').write_text(markup.replace('__DATA__', json.dumps(packed, ensure_ascii=False, separators=(',', ':'))))
+(OUTPUT / 'weather-review.html').write_text(markup.replace('__DATA__', json.dumps({'weather':packed['weather']}, ensure_ascii=False, separators=(',', ':'))))
+if 'tilt' in packed:
+    tilt_page = markup.replace('__DATA__', json.dumps({'weather':packed['tilt']}, ensure_ascii=False, separators=(',', ':')))
+    tilt_page = tilt_page.replace('minmax(112px,1fr)', 'minmax(200px,1fr)').replace('</style>', '#matrix-review .review-controls {display:none}</style>')
+    (OUTPUT / 'weather-tilt-review.html').write_text(tilt_page)
 try:
     from PIL import Image, ImageDraw, ImageFont
     font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 16)
