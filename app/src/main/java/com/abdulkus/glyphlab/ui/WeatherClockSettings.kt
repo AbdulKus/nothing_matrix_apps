@@ -7,6 +7,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -104,25 +105,62 @@ fun WeatherSettings(
         if (config != null && onChange != null) {
             Spacer(Modifier.height(4.dp))
             Text(language.t("widget_theme"), color = Dim, fontSize = 11.sp)
-            WidgetTheme.entries.chunked(2).forEach { row ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    row.forEach { theme ->
-                        OutlinedButton(
-                            onClick = {
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                WidgetTheme.entries.forEach { theme ->
+                    val active = config.widgetTheme == theme
+                    Text(
+                        text = (if (active) "✓ " else "") + (if (language == AppLanguage.RU) theme.titleRu else theme.titleEn).uppercase(),
+                        color = if (active) Color.Black else Ink,
+                        fontSize = 10.sp,
+                        fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                        modifier = Modifier
+                            .background(if (active) Ink else Color(0xFF1B1B1B), RoundedCornerShape(3.dp))
+                            .border(1.dp, if (active) Ink else Color(0xFF303030), RoundedCornerShape(3.dp))
+                            .clickable {
                                 onChange(config.copy(widgetTheme = theme))
                                 com.abdulkus.glyphlab.widget.WeatherWidgetProvider.startLiveAnimation(context)
-                            },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                (if (config.widgetTheme == theme) "✓ " else "") +
-                                    if (language == AppLanguage.RU) theme.titleRu else theme.titleEn,
-                                fontSize = 10.sp,
-                                textAlign = TextAlign.Center
-                            )
-                        }
+                            }
+                            .padding(horizontal = 10.dp, vertical = 8.dp)
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+            Text(language.t("widget_accent"), color = Dim, fontSize = 11.sp)
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                WidgetAccentColor.entries.forEach { accent ->
+                    val active = config.widgetAccent == accent
+                    val dotColor = Color(if (config.widgetTheme.isLight) accent.hexLightBg else accent.hexDarkBg)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .background(if (active) Ink else Color(0xFF1B1B1B), RoundedCornerShape(3.dp))
+                            .border(1.dp, if (active) Ink else Color(0xFF303030), RoundedCornerShape(3.dp))
+                            .clickable {
+                                onChange(config.copy(widgetAccent = accent))
+                                com.abdulkus.glyphlab.widget.WeatherWidgetProvider.startLiveAnimation(context)
+                            }
+                            .padding(horizontal = 10.dp, vertical = 8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(dotColor, CircleShape)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = (if (language == AppLanguage.RU) accent.titleRu else accent.titleEn).uppercase(),
+                            color = if (active) Color.Black else Ink,
+                            fontSize = 10.sp,
+                            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal
+                        )
                     }
-                    if (row.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
         }

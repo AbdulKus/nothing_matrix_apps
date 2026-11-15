@@ -119,7 +119,9 @@ class WeatherWidgetProvider : AppWidgetProvider() {
                 val configStore = com.abdulkus.glyphlab.data.ConfigStore(app)
                 val frameDelayMs = 125L // 8 FPS fluid Nothing dot-matrix animation
                 var counter = 0
-                var currentTheme = configStore.load().widgetTheme
+                var currentConfig = configStore.load()
+                var currentTheme = currentConfig.widgetTheme
+                var currentAccent = currentConfig.widgetAccent
 
                 while (isActive) {
                     val currStandardIds = appWidgetManager.getAppWidgetIds(standardComp)
@@ -128,7 +130,9 @@ class WeatherWidgetProvider : AppWidgetProvider() {
 
                     // Check theme every 8 frames (~1 second) to immediately pick up user customizations
                     if (counter % 8 == 0) {
-                        currentTheme = configStore.load().widgetTheme
+                        currentConfig = configStore.load()
+                        currentTheme = currentConfig.widgetTheme
+                        currentAccent = currentConfig.widgetAccent
                     }
 
                     val elapsed = (System.nanoTime() - startTime) / 1e9
@@ -145,6 +149,7 @@ class WeatherWidgetProvider : AppWidgetProvider() {
                             seconds = elapsed,
                             matrixOnly = false,
                             theme = currentTheme,
+                            accent = currentAccent,
                             size = 320
                         )
                         val views = RemoteViews(app.packageName, R.layout.widget_weather).apply {
@@ -165,6 +170,7 @@ class WeatherWidgetProvider : AppWidgetProvider() {
                             seconds = elapsed,
                             matrixOnly = true,
                             theme = currentTheme,
+                            accent = currentAccent,
                             size = 320
                         )
                         val matrixViews = RemoteViews(app.packageName, R.layout.widget_weather_matrix).apply {

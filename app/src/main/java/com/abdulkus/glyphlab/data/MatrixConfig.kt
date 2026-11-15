@@ -22,11 +22,26 @@ enum class AutoBrightnessSource(val title: String) {
     SCREEN_BRIGHTNESS("Яркость экрана")
 }
 
-enum class WidgetTheme(val titleEn: String, val titleRu: String) {
-    SYSTEM("Wallpaper Tint", "В цвет обоев (Тема Nothing)"),
-    GLASS("Nothing Dark Glass", "Матовое стекло Nothing"),
-    TRANSPARENT("Transparent", "Без фона (Только матрица)"),
-    BLACK("AMOLED Black", "Черный AMOLED")
+enum class WidgetTheme(val titleEn: String, val titleRu: String, val isLight: Boolean = false) {
+    SYSTEM("Frosted Wallpaper", "Матовое стекло (обои)", false),
+    WALLPAPER_SOLID("Solid Wallpaper", "Цвет обоев (непрозрачный)", false),
+    GLASS("Nothing Dark Glass", "Тёмное матовое стекло", false),
+    SOLID_DARK("Solid Dark", "Тёмный непрозрачный", false),
+    BLACK("AMOLED Black", "Чёрный AMOLED", false),
+    LIGHT_GLASS("Nothing Light Glass", "Светлое матовое стекло", true),
+    LIGHT_WALLPAPER("Light Wallpaper", "Светлый цвет обоев", true),
+    SOLID_LIGHT("Solid Light", "Светлый непрозрачный", true),
+    WHITE("Pure White", "Белый (Pure White)", true),
+    TRANSPARENT("Transparent", "Без фона (только матрица)", false)
+}
+
+enum class WidgetAccentColor(val titleEn: String, val titleRu: String, val hexDarkBg: Int, val hexLightBg: Int) {
+    WHITE("Nothing White", "Классический белый", 0xFFFFFFFF.toInt(), 0xFF121212.toInt()),
+    RED("Nothing Red", "Фирменный красный", 0xFFD71921.toInt(), 0xFFD71921.toInt()),
+    AMBER("Warm Amber", "Тёплый янтарный", 0xFFFF9800.toInt(), 0xFFE65100.toInt()),
+    GREEN("Matrix Green", "Матричный зелёный", 0xFF4CAF50.toInt(), 0xFF2E7D32.toInt()),
+    BLUE("Cyan Blue", "Неоновый синий", 0xFF00E5FF.toInt(), 0xFF0097A7.toInt()),
+    MONOCHROME("Monochrome", "Монохромный контраст", 0xFFEEEEEE.toInt(), 0xFF101010.toInt())
 }
 
 data class MatrixConfig(
@@ -52,5 +67,6 @@ data class MatrixConfig(
     val clockFont: ClockFont = ClockFont.CLASSIC,
     val clockLayout: ClockLayout = ClockLayout.STACKED,
     val clockTransition: ClockTransition = ClockTransition.RANDOM,
-    val widgetTheme: WidgetTheme = WidgetTheme.SYSTEM
+    val widgetTheme: WidgetTheme = WidgetTheme.SYSTEM,
+    val widgetAccent: WidgetAccentColor = WidgetAccentColor.WHITE
 )

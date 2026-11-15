@@ -38,12 +38,14 @@ class ConfigStore(context: Context) {
         clockFont = prefs.enum("clock_font", ClockFont.CLASSIC),
         clockLayout = prefs.enum("clock_layout", ClockLayout.STACKED),
         clockTransition = prefs.enum("clock_transition", ClockTransition.RANDOM),
-        widgetTheme = prefs.enum("widget_theme", WidgetTheme.SYSTEM)
+        widgetTheme = prefs.enum("widget_theme", WidgetTheme.SYSTEM),
+        widgetAccent = prefs.enum("widget_accent", WidgetAccentColor.WHITE)
     )
 
     fun save(config: MatrixConfig) {
         prefs.edit()
             .putString("widget_theme", config.widgetTheme.name)
+            .putString("widget_accent", config.widgetAccent.name)
             .putString("clock_transition", config.clockTransition.name)
             .putString("clock_font", config.clockFont.name)
             .putString("clock_layout", config.clockLayout.name)
