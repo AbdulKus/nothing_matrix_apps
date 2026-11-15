@@ -91,6 +91,11 @@ fun WeatherSettings(language: AppLanguage) {
         }, modifier = Modifier.fillMaxWidth()) {
             Text(language.t("add_weather_widget"), fontSize = 12.sp)
         }
+        OutlinedButton(onClick = {
+            com.abdulkus.glyphlab.widget.WeatherMatrixWidgetProvider.pinWidget(context)
+        }, modifier = Modifier.fillMaxWidth()) {
+            Text(language.t("add_weather_matrix_widget"), fontSize = 12.sp)
+        }
     }
     if (showGallery) WeatherGallery(language) { showGallery = false }
 }

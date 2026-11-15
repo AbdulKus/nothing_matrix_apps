@@ -347,6 +347,15 @@ private fun GlyphLabScreen(
             Text(language.t("add_toy"), fontSize = 11.sp, letterSpacing = 0.45.sp)
         }
 
+        Button(
+            onClick = { com.abdulkus.glyphlab.widget.WeatherWidgetProvider.pinWidget(context) },
+            colors = ButtonDefaults.buttonColors(containerColor = PanelLight, contentColor = White),
+            shape = RoundedCornerShape(4.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(48.dp)
+        ) {
+            Text(language.t("add_weather_widget"), fontSize = 11.sp, letterSpacing = 0.45.sp)
+        }
+
         Footer(
             language = language,
             onLanguage = { showLanguageDialog = true },

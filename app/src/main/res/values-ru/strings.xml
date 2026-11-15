@@ -4,4 +4,6 @@
     <string name="toy_summary">Выбранный эффект Glyph Lab на матрице 13×13</string>
     <string name="widget_weather_name">Погода Nothing</string>
     <string name="widget_weather_desc">Круглый виджет погоды Nothing с анимацией матрицы Glyph</string>
+    <string name="widget_weather_matrix_name">Погода Nothing (Матрица)</string>
+    <string name="widget_weather_matrix_desc">Круглый виджет анимации погоды Nothing на весь экран без текста</string>
 </resources>

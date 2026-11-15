@@ -12,6 +12,7 @@
         android:layout_height="match_parent"
         android:layout_centerInParent="true"
         android:scaleType="fitCenter"
+        android:src="@drawable/widget_weather_preview"
         android:contentDescription="@string/widget_weather_desc" />
 
     <LinearLayout

@@ -18,13 +18,8 @@ import com.abdulkus.glyphlab.weather.WeatherRepository
 import kotlinx.coroutines.*
 
 /**
- * AppWidgetProvider for the Nothing OS circular live weather widget.
- * Features:
- * - Continuous live animated Glyph Matrix weather while phone screen is interactive
- * - Automatic low-power sleep when screen turns off (ACTION_SCREEN_OFF)
- * - Immediate wake and live animation resume on unlock / screen-on
- * - Interactive tap on the matrix to trigger weather sync & animation
- * - Tap on temperature/condition to open Glyph Lab settings
+ * AppWidgetProvider for the Nothing OS circular live weather widget (standard with temp).
+ * Coordinates continuous live animation for both standard and full-matrix widgets.
  */
 class WeatherWidgetProvider : AppWidgetProvider() {
 
@@ -40,7 +35,7 @@ class WeatherWidgetProvider : AppWidgetProvider() {
 
     override fun onDisabled(context: Context) {
         super.onDisabled(context)
-        stopLiveAnimation()
+        checkAndStopIfNoWidgets(context)
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -81,13 +76,26 @@ class WeatherWidgetProvider : AppWidgetProvider() {
             }
         }
 
+        fun checkAndStopIfNoWidgets(context: Context) {
+            val app = context.applicationContext
+            val appWidgetManager = AppWidgetManager.getInstance(app)
+            val standardIds = appWidgetManager.getAppWidgetIds(ComponentName(app, WeatherWidgetProvider::class.java))
+            val matrixIds = appWidgetManager.getAppWidgetIds(ComponentName(app, WeatherMatrixWidgetProvider::class.java))
+            if (standardIds.isEmpty() && matrixIds.isEmpty()) {
+                stopLiveAnimation()
+            }
+        }
+
         @Synchronized
         fun startLiveAnimation(context: Context) {
             val app = context.applicationContext
             val appWidgetManager = AppWidgetManager.getInstance(app)
-            val componentName = ComponentName(app, WeatherWidgetProvider::class.java)
-            val ids = appWidgetManager.getAppWidgetIds(componentName)
-            if (ids.isEmpty()) return
+            val standardComp = ComponentName(app, WeatherWidgetProvider::class.java)
+            val matrixComp = ComponentName(app, WeatherMatrixWidgetProvider::class.java)
+            val standardIds = appWidgetManager.getAppWidgetIds(standardComp)
+            val matrixIds = appWidgetManager.getAppWidgetIds(matrixComp)
+
+            if (standardIds.isEmpty() && matrixIds.isEmpty()) return
 
             if (!isReceiverRegistered) {
                 val filter = IntentFilter().apply {
@@ -112,29 +120,51 @@ class WeatherWidgetProvider : AppWidgetProvider() {
                 var counter = 0
 
                 while (isActive) {
-                    val currentIds = appWidgetManager.getAppWidgetIds(componentName)
-                    if (currentIds.isEmpty() || !pm.isInteractive) break
+                    val currStandardIds = appWidgetManager.getAppWidgetIds(standardComp)
+                    val currMatrixIds = appWidgetManager.getAppWidgetIds(matrixComp)
+                    if ((currStandardIds.isEmpty() && currMatrixIds.isEmpty()) || !pm.isInteractive) break
 
                     val elapsed = (System.nanoTime() - startTime) / 1e9
                     val snapshot = repo.state.value.snapshot
                     val condition = snapshot?.currentCondition() ?: WeatherCondition.CLOUDY
                     val temp = snapshot?.temperature
 
-                    val bitmap = WeatherWidgetRenderer.renderDial(
-                        context = app,
-                        condition = condition,
-                        temperature = temp,
-                        seconds = elapsed,
-                        size = 320
-                    )
-
-                    val views = RemoteViews(app.packageName, R.layout.widget_weather).apply {
-                        setImageViewBitmap(R.id.widget_dial_image, bitmap)
-                        setupClickIntents(app, this)
+                    // 1. Update standard widgets (with temperature/label)
+                    if (currStandardIds.isNotEmpty()) {
+                        val bitmap = WeatherWidgetRenderer.renderDial(
+                            context = app,
+                            condition = condition,
+                            temperature = temp,
+                            seconds = elapsed,
+                            matrixOnly = false,
+                            size = 320
+                        )
+                        val views = RemoteViews(app.packageName, R.layout.widget_weather).apply {
+                            setImageViewBitmap(R.id.widget_dial_image, bitmap)
+                            setupClickIntents(app, this)
+                        }
+                        for (id in currStandardIds) {
+                            appWidgetManager.updateAppWidget(id, views)
+                        }
                     }
 
-                    for (id in currentIds) {
-                        appWidgetManager.updateAppWidget(id, views)
+                    // 2. Update full-matrix widgets (dots only across full circle)
+                    if (currMatrixIds.isNotEmpty()) {
+                        val matrixBitmap = WeatherWidgetRenderer.renderDial(
+                            context = app,
+                            condition = condition,
+                            temperature = temp,
+                            seconds = elapsed,
+                            matrixOnly = true,
+                            size = 320
+                        )
+                        val matrixViews = RemoteViews(app.packageName, R.layout.widget_weather_matrix).apply {
+                            setImageViewBitmap(R.id.widget_dial_image, matrixBitmap)
+                            WeatherMatrixWidgetProvider.setupClickIntents(app, this)
+                        }
+                        for (id in currMatrixIds) {
+                            appWidgetManager.updateAppWidget(id, matrixViews)
+                        }
                     }
 
                     // Periodically refresh weather every 20 minutes in the background
@@ -158,7 +188,6 @@ class WeatherWidgetProvider : AppWidgetProvider() {
         }
 
         private fun setupClickIntents(context: Context, views: RemoteViews) {
-            // Upper area (matrix): interactive animation trigger and weather sync
             val animateIntent = Intent(context, WeatherWidgetProvider::class.java).apply {
                 action = ACTION_ANIMATE_WIDGET
             }
@@ -170,7 +199,6 @@ class WeatherWidgetProvider : AppWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.widget_tap_matrix, animatePendingIntent)
 
-            // Lower area (temp / condition): launch Glyph Lab settings
             val openIntent = Intent(context, HomeActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }

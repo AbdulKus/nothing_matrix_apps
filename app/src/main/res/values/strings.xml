@@ -4,4 +4,6 @@
     <string name="toy_summary">The active Glyph Lab effect on the 13×13 matrix</string>
     <string name="widget_weather_name">Nothing Weather</string>
     <string name="widget_weather_desc">Nothing circular weather widget with animated Glyph Matrix</string>
+    <string name="widget_weather_matrix_name">Nothing Weather (Full Matrix)</string>
+    <string name="widget_weather_matrix_desc">Full-circle Nothing animated weather LED matrix without text</string>
 </resources>

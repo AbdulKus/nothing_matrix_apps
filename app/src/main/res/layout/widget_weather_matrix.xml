@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_matrix_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_circle_background"
+    android:padding="2dp">
+
+    <ImageView
+        android:id="@+id/widget_dial_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_centerInParent="true"
+        android:scaleType="fitCenter"
+        android:src="@drawable/widget_matrix_preview"
+        android:contentDescription="@string/widget_weather_matrix_desc" />
+
+    <FrameLayout
+        android:id="@+id/widget_tap_matrix"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clickable="true"
+        android:focusable="true" />
+
+</RelativeLayout>
