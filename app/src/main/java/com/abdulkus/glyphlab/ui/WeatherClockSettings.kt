@@ -131,7 +131,7 @@ fun WeatherSettings(
 }
 
 @Composable
-private fun WeatherGallery(language: AppLanguage, onDismiss: () -> Unit) {
+fun WeatherGallery(language: AppLanguage, onDismiss: () -> Unit) {
     var selected by remember { mutableStateOf(WeatherCondition.SUNNY) }
     var seconds by remember { mutableDoubleStateOf(0.0) }
     val preview by WeatherPreview.state.collectAsState()

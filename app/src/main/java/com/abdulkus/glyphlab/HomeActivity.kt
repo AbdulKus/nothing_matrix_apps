@@ -1,5 +1,6 @@
 package com.abdulkus.glyphlab
 
+import android.Manifest
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -8,9 +9,15 @@ import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -72,12 +79,18 @@ import com.abdulkus.glyphlab.data.EffectType
 import com.abdulkus.glyphlab.data.MatrixConfig
 import com.abdulkus.glyphlab.data.SolidType
 import com.abdulkus.glyphlab.engine.MatrixEngine
+import com.abdulkus.glyphlab.data.WidgetTheme
+import com.abdulkus.glyphlab.glyph.GlyphConnection
 import com.abdulkus.glyphlab.glyph.GlyphRuntime
 import com.abdulkus.glyphlab.ui.AppLanguage
 import com.abdulkus.glyphlab.ui.t
 import com.abdulkus.glyphlab.update.GitHubUpdater
+import com.abdulkus.glyphlab.weather.WeatherCondition
+import com.abdulkus.glyphlab.weather.WeatherRepository
 import kotlinx.coroutines.launch
 import java.io.File
+import java.text.DateFormat
+import java.util.Date
 import kotlin.math.roundToInt
 
 class HomeActivity : ComponentActivity() {
@@ -95,8 +108,9 @@ class HomeActivity : ComponentActivity() {
         setContent {
             GlyphLabTheme {
                 var language by remember { mutableStateOf(initialLanguage) }
+                val is4aPro = remember { isPhone4aPro() }
                 if (language == null) {
-                    FirstRunLanguageScreen { selected ->
+                    FirstRunLanguageScreen(is4aPro) { selected ->
                         prefs.edit().putString("language", selected.storageCode).apply()
                         language = selected
                     }
@@ -125,6 +139,15 @@ class HomeActivity : ComponentActivity() {
         runtime.stop()
         super.onDestroy()
     }
+}
+
+private fun isPhone4aPro(): Boolean {
+    return runCatching {
+        com.nothing.ketchum.Common.is25111p() ||
+            android.os.Build.MODEL.equals("A069P", ignoreCase = true) ||
+            android.os.Build.DEVICE.equals("A069P", ignoreCase = true) ||
+            android.os.Build.PRODUCT.equals("A069P", ignoreCase = true)
+    }.getOrDefault(false)
 }
 
 private val Black = Color(0xFF050505)
@@ -166,7 +189,7 @@ private fun GlyphLabTheme(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun FirstRunLanguageScreen(onSelected: (AppLanguage) -> Unit) {
+private fun FirstRunLanguageScreen(is4aPro: Boolean, onSelected: (AppLanguage) -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -186,7 +209,7 @@ private fun FirstRunLanguageScreen(onSelected: (AppLanguage) -> Unit) {
             letterSpacing = 1.6.sp
         )
         Text(
-            "FOR PHONE (4a) PRO",
+            if (is4aPro) "FOR PHONE (4a) PRO" else "WEATHER WIDGET",
             color = Muted,
             fontSize = 10.sp,
             letterSpacing = 1.1.sp,
@@ -247,8 +270,18 @@ private fun GlyphLabScreen(
     var outputEnabled by remember { mutableStateOf(false) }
     var language by remember(initialLanguage) { mutableStateOf(initialLanguage) }
     var showLanguageDialog by remember { mutableStateOf(false) }
+    var showGalleryDialog by remember { mutableStateOf(false) }
     var updateState by remember { mutableStateOf<UpdateState>(UpdateState.Hidden) }
     val frame by runtime.frame.collectAsState()
+    val connection by runtime.connection.collectAsState()
+    val is4aPro = remember { isPhone4aPro() }
+    val hasMatrix = connection == GlyphConnection.CONNECTED || (is4aPro && connection != GlyphConnection.UNAVAILABLE)
+
+    LaunchedEffect(hasMatrix) {
+        if (!hasMatrix && config.effect != EffectType.WEATHER) {
+            config = config.copy(effect = EffectType.WEATHER)
+        }
+    }
 
     LaunchedEffect(config) {
         runtime.updateConfig(config)
@@ -272,7 +305,7 @@ private fun GlyphLabScreen(
             .padding(horizontal = 18.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Header()
+        Header(hasMatrix)
 
         UpdateBanner(
             language = language,
@@ -299,69 +332,34 @@ private fun GlyphLabScreen(
             }
         )
 
-        MatrixPreview(frame)
-
-        Text(
-            text = effectTitle(language, config.effect),
-            color = White,
-            fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Bold,
-            fontSize = 15.sp,
-            letterSpacing = 1.4.sp,
-            modifier = Modifier.padding(top = 8.dp, bottom = 12.dp)
-        )
-
-        EffectSelector(language, config.effect) { config = config.copy(effect = it) }
-        Spacer(Modifier.height(18.dp))
-
-        SettingsPanel(language, config) { config = it }
-        Spacer(Modifier.height(18.dp))
-
-        Button(
-            onClick = {
-                outputEnabled = !outputEnabled
-                runtime.setOutputEnabled(outputEnabled)
-            },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (outputEnabled) Red else White,
-                contentColor = if (outputEnabled) White else Black
-            ),
-            shape = RoundedCornerShape(4.dp),
-            modifier = Modifier.fillMaxWidth().height(54.dp)
-        ) {
-            Text(
-                if (outputEnabled) language.t("stop") else language.t("start"),
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
-                letterSpacing = 0.7.sp,
-                fontSize = 12.sp
+        if (!hasMatrix) {
+            MinimalWeatherContent(
+                language = language,
+                config = config,
+                frame = frame,
+                onConfigChange = { config = it },
+                onOpenGallery = { showGalleryDialog = true },
+                onLanguage = { showLanguageDialog = true },
+                onGitHub = { openUrl(context, "https://github.com/AbdulKus/nothing_matrix_apps") },
+                onDonate = { openUrl(context, "https://abdulkus.github.io/donate") }
+            )
+        } else {
+            FullGlyphLabContent(
+                context = context,
+                language = language,
+                config = config,
+                frame = frame,
+                outputEnabled = outputEnabled,
+                onConfigChange = { config = it },
+                onToggleOutput = {
+                    outputEnabled = !outputEnabled
+                    runtime.setOutputEnabled(outputEnabled)
+                },
+                onLanguage = { showLanguageDialog = true },
+                onGitHub = { openUrl(context, "https://github.com/AbdulKus/nothing_matrix_apps") },
+                onDonate = { openUrl(context, "https://abdulkus.github.io/donate") }
             )
         }
-
-        Button(
-            onClick = { openGlyphToyManager(context, language) },
-            colors = ButtonDefaults.buttonColors(containerColor = PanelLight, contentColor = White),
-            shape = RoundedCornerShape(4.dp),
-            modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(48.dp)
-        ) {
-            Text(language.t("add_toy"), fontSize = 11.sp, letterSpacing = 0.45.sp)
-        }
-
-        Button(
-            onClick = { com.abdulkus.glyphlab.widget.WeatherWidgetProvider.pinWidget(context) },
-            colors = ButtonDefaults.buttonColors(containerColor = PanelLight, contentColor = White),
-            shape = RoundedCornerShape(4.dp),
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(48.dp)
-        ) {
-            Text(language.t("add_weather_widget"), fontSize = 11.sp, letterSpacing = 0.45.sp)
-        }
-
-        Footer(
-            language = language,
-            onLanguage = { showLanguageDialog = true },
-            onGitHub = { openUrl(context, "https://github.com/AbdulKus/nothing_matrix_apps") },
-            onDonate = { openUrl(context, "https://abdulkus.github.io/donate") }
-        )
     }
 
     if (showLanguageDialog) {
@@ -375,10 +373,290 @@ private fun GlyphLabScreen(
             }
         )
     }
+
+    if (showGalleryDialog) {
+        com.abdulkus.glyphlab.ui.WeatherGallery(language) { showGalleryDialog = false }
+    }
 }
 
 @Composable
-private fun Header() {
+private fun MinimalWeatherContent(
+    language: AppLanguage,
+    config: MatrixConfig,
+    frame: IntArray,
+    onConfigChange: (MatrixConfig) -> Unit,
+    onOpenGallery: () -> Unit,
+    onLanguage: () -> Unit,
+    onGitHub: () -> Unit,
+    onDonate: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val repository = remember { WeatherRepository.get(context) }
+    val weatherState by repository.state.collectAsState()
+    var hasPermission by remember { mutableStateOf(repository.hasLocationPermission()) }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasPermission = granted
+        if (granted) {
+            scope.launch { repository.updateLocation() }
+        }
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasPermission = repository.hasLocationPermission()
+                if (hasPermission) {
+                    repository.refreshIfNeeded()
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val snapshot = weatherState.snapshot
+    val condition = snapshot?.currentCondition() ?: WeatherCondition.UNKNOWN
+    val tempText = if (snapshot != null && condition != WeatherCondition.UNKNOWN) " · ${snapshot.temperature.roundToInt()}°" else ""
+    val conditionTitle = (if (language == AppLanguage.RU) condition.ru else condition.en).uppercase()
+
+    MatrixPreview(frame)
+
+    Text(
+        text = conditionTitle + tempText,
+        color = White,
+        fontFamily = FontFamily.Monospace,
+        fontWeight = FontWeight.Bold,
+        fontSize = 15.sp,
+        letterSpacing = 1.4.sp,
+        modifier = Modifier.padding(top = 14.dp, bottom = 2.dp)
+    )
+
+    if (weatherState.loading) {
+        Text(
+            language.t("weather_loading"),
+            color = Red,
+            fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace,
+            modifier = Modifier.padding(bottom = 14.dp)
+        )
+    } else if (snapshot != null) {
+        val timeStr = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(snapshot.observedAt))
+        Text(
+            "${language.t("weather_updated")} $timeStr",
+            color = Muted,
+            fontSize = 10.sp,
+            fontFamily = FontFamily.Monospace,
+            modifier = Modifier.padding(bottom = 14.dp)
+        )
+    } else {
+        Spacer(Modifier.height(14.dp))
+    }
+
+    if (!hasPermission) {
+        Button(
+            onClick = { permissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION) },
+            colors = ButtonDefaults.buttonColors(containerColor = Red, contentColor = White),
+            shape = RoundedCornerShape(4.dp),
+            modifier = Modifier.fillMaxWidth().height(50.dp)
+        ) {
+            Text(
+                language.t("grant_permission"),
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 0.7.sp,
+                fontSize = 11.sp
+            )
+        }
+    } else {
+        Button(
+            onClick = { scope.launch { repository.updateLocation() } },
+            enabled = !weatherState.loading,
+            colors = ButtonDefaults.buttonColors(containerColor = PanelLight, contentColor = White),
+            shape = RoundedCornerShape(4.dp),
+            modifier = Modifier.fillMaxWidth().height(48.dp)
+        ) {
+            Text(
+                language.t(if (weatherState.loading) "weather_loading" else "weather_locate"),
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 0.5.sp
+            )
+        }
+    }
+
+    Button(
+        onClick = { com.abdulkus.glyphlab.widget.WeatherWidgetProvider.pinWidget(context) },
+        colors = ButtonDefaults.buttonColors(containerColor = White, contentColor = Black),
+        shape = RoundedCornerShape(4.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(50.dp)
+    ) {
+        Text(
+            language.t("add_weather_widget"),
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace,
+            letterSpacing = 0.7.sp,
+            fontSize = 11.sp
+        )
+    }
+
+    Button(
+        onClick = { com.abdulkus.glyphlab.widget.WeatherMatrixWidgetProvider.pinWidget(context) },
+        colors = ButtonDefaults.buttonColors(containerColor = PanelLight, contentColor = White),
+        shape = RoundedCornerShape(4.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(48.dp)
+    ) {
+        Text(
+            language.t("add_weather_matrix_widget"),
+            fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace,
+            letterSpacing = 0.5.sp
+        )
+    }
+
+    Spacer(Modifier.height(16.dp))
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(4.dp))
+            .background(Panel)
+            .border(1.dp, Line, RoundedCornerShape(4.dp))
+            .padding(12.dp)
+    ) {
+        Label(language.t("widget_theme"))
+        Spacer(Modifier.height(8.dp))
+        WidgetTheme.entries.chunked(2).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                horizontalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
+                row.forEach { theme ->
+                    val active = config.widgetTheme == theme
+                    Text(
+                        text = (if (active) "✓ " else "") + (if (language == AppLanguage.RU) theme.titleRu else theme.titleEn).uppercase(),
+                        color = if (active) Black else White,
+                        fontSize = 10.sp,
+                        fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(if (active) White else PanelLight)
+                            .border(1.dp, if (active) White else Line, RoundedCornerShape(3.dp))
+                            .clickable {
+                                onConfigChange(config.copy(widgetTheme = theme))
+                                com.abdulkus.glyphlab.widget.WeatherWidgetProvider.startLiveAnimation(context)
+                            }
+                            .padding(vertical = 10.dp)
+                    )
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+
+    Button(
+        onClick = onOpenGallery,
+        colors = ButtonDefaults.buttonColors(containerColor = PanelLight, contentColor = White),
+        shape = RoundedCornerShape(4.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(44.dp)
+    ) {
+        Text(
+            language.t("weather_gallery").replace("{count}", WeatherCondition.entries.size.toString()),
+            fontSize = 10.sp,
+            letterSpacing = 0.5.sp
+        )
+    }
+
+    Footer(
+        language = language,
+        onLanguage = onLanguage,
+        onGitHub = onGitHub,
+        onDonate = onDonate
+    )
+}
+
+@Composable
+private fun FullGlyphLabContent(
+    context: Context,
+    language: AppLanguage,
+    config: MatrixConfig,
+    frame: IntArray,
+    outputEnabled: Boolean,
+    onConfigChange: (MatrixConfig) -> Unit,
+    onToggleOutput: () -> Unit,
+    onLanguage: () -> Unit,
+    onGitHub: () -> Unit,
+    onDonate: () -> Unit
+) {
+    MatrixPreview(frame)
+
+    Text(
+        text = effectTitle(language, config.effect),
+        color = White,
+        fontFamily = FontFamily.Monospace,
+        fontWeight = FontWeight.Bold,
+        fontSize = 15.sp,
+        letterSpacing = 1.4.sp,
+        modifier = Modifier.padding(top = 8.dp, bottom = 12.dp)
+    )
+
+    EffectSelector(language, config.effect) { onConfigChange(config.copy(effect = it)) }
+    Spacer(Modifier.height(18.dp))
+
+    SettingsPanel(language, config, onConfigChange)
+    Spacer(Modifier.height(18.dp))
+
+    Button(
+        onClick = onToggleOutput,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (outputEnabled) Red else White,
+            contentColor = if (outputEnabled) White else Black
+        ),
+        shape = RoundedCornerShape(4.dp),
+        modifier = Modifier.fillMaxWidth().height(54.dp)
+    ) {
+        Text(
+            if (outputEnabled) language.t("stop") else language.t("start"),
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace,
+            letterSpacing = 0.7.sp,
+            fontSize = 12.sp
+        )
+    }
+
+    Button(
+        onClick = { openGlyphToyManager(context, language) },
+        colors = ButtonDefaults.buttonColors(containerColor = PanelLight, contentColor = White),
+        shape = RoundedCornerShape(4.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(48.dp)
+    ) {
+        Text(language.t("add_toy"), fontSize = 11.sp, letterSpacing = 0.45.sp)
+    }
+
+    Button(
+        onClick = { com.abdulkus.glyphlab.widget.WeatherWidgetProvider.pinWidget(context) },
+        colors = ButtonDefaults.buttonColors(containerColor = PanelLight, contentColor = White),
+        shape = RoundedCornerShape(4.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(48.dp)
+    ) {
+        Text(language.t("add_weather_widget"), fontSize = 11.sp, letterSpacing = 0.45.sp)
+    }
+
+    Footer(
+        language = language,
+        onLanguage = onLanguage,
+        onGitHub = onGitHub,
+        onDonate = onDonate
+    )
+}
+
+@Composable
+private fun Header(hasMatrix: Boolean) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 12.dp)
     ) {
@@ -391,7 +669,7 @@ private fun Header() {
             letterSpacing = 1.5.sp
         )
         Text(
-            "FOR PHONE (4a) PRO",
+            if (hasMatrix) "FOR PHONE (4a) PRO" else "WEATHER WIDGET",
             color = Muted,
             fontSize = 10.sp,
             letterSpacing = 1.sp,
