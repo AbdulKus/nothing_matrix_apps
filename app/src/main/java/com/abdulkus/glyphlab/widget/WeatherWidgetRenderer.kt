@@ -74,10 +74,10 @@ object WeatherWidgetRenderer {
                 val g = Color.green(tintColor)
                 val b = Color.blue(tintColor)
 
-                // Translucent disc matching stock Nothing widget density (~47% opacity)
+                // Translucent disc matching stock Nothing widget density (~45% opacity)
                 val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     style = Paint.Style.FILL
-                    color = Color.argb(120, r, g, b)
+                    color = Color.argb(115, r, g, b)
                 }
                 canvas.drawCircle(half, half, discRadius, bgPaint)
             }
@@ -85,7 +85,7 @@ object WeatherWidgetRenderer {
                 // Classic Nothing dark translucent glass disc
                 val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     style = Paint.Style.FILL
-                    color = Color.argb(120, 18, 18, 22)
+                    color = Color.argb(115, 18, 18, 22)
                 }
                 canvas.drawCircle(half, half, discRadius, bgPaint)
             }
