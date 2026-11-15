@@ -2,13 +2,13 @@ package com.abdulkus.glyphlab.weather
 
 /** Visual groups for all 29 documented Open-Meteo WMO codes, plus derived/demo scenes. */
 enum class WeatherCondition(val ru: String, val en: String) {
-    SUNNY("Солнце", "Sunny"),
-    CLEAR_NIGHT("Ясная ночь", "Clear night"),
-    PARTLY_CLOUDY_DAY("Солнце за облаком", "Partly cloudy day"),
-    PARTLY_CLOUDY_NIGHT("Луна за облаком", "Partly cloudy night"),
-    CLOUDY("Облачно", "Overcast"),
+    SUNNY("Ясно", "Sunny"),
+    CLEAR_NIGHT("Ясно", "Clear night"),
+    PARTLY_CLOUDY_DAY("Малооблачно", "Partly cloudy"),
+    PARTLY_CLOUDY_NIGHT("Малооблачно", "Partly cloudy"),
+    CLOUDY("Пасмурно", "Overcast"),
     FOG("Туман", "Fog"),
-    RIME_FOG("Туман с изморозью", "Rime fog"),
+    RIME_FOG("Ледяной туман", "Rime fog"),
     DRIZZLE("Морось", "Drizzle"),
     FREEZING_DRIZZLE("Ледяная морось", "Freezing drizzle"),
     RAIN("Дождь", "Rain"),
@@ -19,12 +19,12 @@ enum class WeatherCondition(val ru: String, val en: String) {
     SNOW("Снег", "Snow"),
     HEAVY_SNOW("Снегопад", "Heavy snow"),
     SNOW_GRAINS("Снежная крупа", "Snow grains"),
-    SNOW_SHOWERS("Снежные заряды", "Snow showers"),
+    SNOW_SHOWERS("Метель", "Snow showers"),
     THUNDERSTORM("Гроза", "Thunderstorm"),
     HEAVY_THUNDERSTORM("Сильная гроза", "Heavy thunderstorm"),
     HAIL("Град", "Hail"),
     THUNDERSTORM_HAIL("Гроза с градом", "Thunderstorm with hail"),
-    WIND("Ветер", "Wind"),
+    WIND("Ветрено", "Windy"),
     UNKNOWN("Нет данных", "No data");
 
     companion object {

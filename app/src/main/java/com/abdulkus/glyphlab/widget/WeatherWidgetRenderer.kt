@@ -33,76 +33,78 @@ object WeatherWidgetRenderer {
         val half = size / 2f
         val discRadius = half - 3f
 
-        // 1. Draw Nothing OS 5 circular background disc
+        // 1. Draw circular background disc without any artificial rim/outline
         when (theme) {
             WidgetTheme.SYSTEM -> {
-                // Adapt to Nothing OS 5 / Android dynamic wallpaper tint with frosted glass translucency
-                val baseColor = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                // Dynamically extract Nothing OS / Android Monet system wallpaper tint
+                val tintColor = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
                     try {
-                        context.getColor(android.R.color.system_neutral1_900)
-                    } catch (e: Throwable) {
+                        val neutral2 = context.getColor(android.R.color.system_neutral2_800)
+                        val wpColor = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) {
+                            try {
+                                android.app.WallpaperManager.getInstance(context)
+                                    .getWallpaperColors(android.app.WallpaperManager.FLAG_SYSTEM)
+                                    ?.primaryColor?.toArgb()
+                            } catch (_: Throwable) { null }
+                        } else null
+
+                        if (wpColor != null) {
+                            val wr = Color.red(wpColor)
+                            val wg = Color.green(wpColor)
+                            val wb = Color.blue(wpColor)
+                            val nr = Color.red(neutral2)
+                            val ng = Color.green(neutral2)
+                            val nb = Color.blue(neutral2)
+                            Color.rgb(
+                                (nr * 0.60f + wr * 0.40f).roundToInt().coerceIn(0, 255),
+                                (ng * 0.60f + wg * 0.40f).roundToInt().coerceIn(0, 255),
+                                (nb * 0.60f + wb * 0.40f).roundToInt().coerceIn(0, 255)
+                            )
+                        } else {
+                            neutral2
+                        }
+                    } catch (_: Throwable) {
                         Color.rgb(20, 20, 24)
                     }
                 } else {
                     Color.rgb(20, 20, 24)
                 }
-                val r = Color.red(baseColor)
-                val g = Color.green(baseColor)
-                val b = Color.blue(baseColor)
 
-                // Translucent frosted glass fill (~49% opacity) showing wallpaper through
+                val r = Color.red(tintColor)
+                val g = Color.green(tintColor)
+                val b = Color.blue(tintColor)
+
+                // Translucent disc matching wallpaper tone (~40% opacity)
                 val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     style = Paint.Style.FILL
-                    color = Color.argb(125, r, g, b)
+                    color = Color.argb(105, r, g, b)
                 }
                 canvas.drawCircle(half, half, discRadius, bgPaint)
-
-                // Nothing OS 5 frosted glass specular rim
-                val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    style = Paint.Style.STROKE
-                    strokeWidth = size * 0.008f
-                    color = Color.argb(38, 255, 255, 255)
-                }
-                canvas.drawCircle(half, half, discRadius - rimPaint.strokeWidth / 2f, rimPaint)
             }
             WidgetTheme.GLASS -> {
-                // Classic Nothing OS dark frosted glass
+                // Classic Nothing dark translucent glass disc
                 val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     style = Paint.Style.FILL
-                    color = Color.argb(125, 20, 20, 24)
+                    color = Color.argb(95, 18, 18, 22)
                 }
                 canvas.drawCircle(half, half, discRadius, bgPaint)
-
-                val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    style = Paint.Style.STROKE
-                    strokeWidth = size * 0.008f
-                    color = Color.argb(38, 255, 255, 255)
-                }
-                canvas.drawCircle(half, half, discRadius - rimPaint.strokeWidth / 2f, rimPaint)
             }
             WidgetTheme.BLACK -> {
                 // AMOLED Black
                 val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     style = Paint.Style.FILL
-                    color = Color.rgb(10, 10, 12)
+                    color = Color.rgb(8, 8, 10)
                 }
                 canvas.drawCircle(half, half, discRadius, bgPaint)
-
-                val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    style = Paint.Style.STROKE
-                    strokeWidth = size * 0.008f
-                    color = Color.argb(22, 255, 255, 255)
-                }
-                canvas.drawCircle(half, half, discRadius - rimPaint.strokeWidth / 2f, rimPaint)
             }
             WidgetTheme.TRANSPARENT -> {
                 // Transparent: no background disc, matrix dots float directly over wallpaper
             }
         }
 
-        // 2. Phosphor off-dots: clearly visible Nothing phosphor dots across glass/wallpaper/dark
+        // 2. Phosphor off-dots: subtle, authentic dormant phosphor dots (not glaring)
         val unlitPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(82, 255, 255, 255)
+            color = Color.argb(32, 255, 255, 255) // Subtle 12.5% opacity - clean and balanced
             style = Paint.Style.FILL
         }
         val litPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -129,7 +131,7 @@ object WeatherWidgetRenderer {
             val step = matrixWidth / 13f
             val startX = (size - matrixWidth) / 2f
             val startY = (size - matrixWidth) / 2f
-            val baseRadius = step * 0.32f
+            val baseRadius = step * 0.26f
 
             for (y in 0..12) {
                 for (x in 0..12) {
@@ -142,20 +144,20 @@ object WeatherWidgetRenderer {
 
                         if (level > 0) {
                             val factor = (level / 255f).coerceIn(0f, 1f)
-                            val alpha = (140 + factor * 115).roundToInt().coerceIn(0, 255)
+                            val alpha = (160 + factor * 95).roundToInt().coerceIn(0, 255)
                             litPaint.color = Color.argb(alpha, 255, 255, 255)
-                            canvas.drawCircle(cx, cy, step * (0.32f + factor * 0.08f), litPaint)
+                            canvas.drawCircle(cx, cy, step * (0.26f + factor * 0.08f), litPaint)
                         }
                     }
                 }
             }
         } else {
-            // Standard mode: expanded matrix area (red dot removed), temperature & condition
+            // Standard mode: expanded matrix area, temperature & condition label
             val matrixWidth = size * 0.63f
             val step = matrixWidth / 13f
             val startX = (size - matrixWidth) / 2f
             val startY = size * 0.075f
-            val baseRadius = step * 0.30f
+            val baseRadius = step * 0.25f
 
             for (y in 0..12) {
                 for (x in 0..12) {
@@ -168,9 +170,9 @@ object WeatherWidgetRenderer {
 
                         if (level > 0) {
                             val factor = (level / 255f).coerceIn(0f, 1f)
-                            val alpha = (140 + factor * 115).roundToInt().coerceIn(0, 255)
+                            val alpha = (160 + factor * 95).roundToInt().coerceIn(0, 255)
                             litPaint.color = Color.argb(alpha, 255, 255, 255)
-                            canvas.drawCircle(cx, cy, step * (0.30f + factor * 0.08f), litPaint)
+                            canvas.drawCircle(cx, cy, step * (0.25f + factor * 0.08f), litPaint)
                         }
                     }
                 }
@@ -189,7 +191,11 @@ object WeatherWidgetRenderer {
             val isRu = Locale.getDefault().language.lowercase() == "ru"
             val rawCond = if (isRu) condition.ru else condition.en
             val condText = rawCond.uppercase()
-            condPaint.textSize = if (condText.length > 12) size * 0.042f else size * 0.052f
+            condPaint.textSize = when {
+                condText.length > 18 -> size * 0.034f
+                condText.length > 12 -> size * 0.040f
+                else -> size * 0.050f
+            }
             canvas.drawText(condText, half, size * 0.91f, condPaint)
         }
 

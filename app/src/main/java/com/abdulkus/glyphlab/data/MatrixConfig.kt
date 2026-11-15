@@ -23,9 +23,9 @@ enum class AutoBrightnessSource(val title: String) {
 }
 
 enum class WidgetTheme(val titleEn: String, val titleRu: String) {
-    SYSTEM("Nothing OS 5 Glass (System)", "Матовое стекло Nothing OS 5"),
-    GLASS("Nothing Glass (Dark)", "Матовое стекло (Dark Glass)"),
-    TRANSPARENT("Transparent", "Без фона (Прозрачный)"),
+    SYSTEM("Wallpaper Tint", "В цвет обоев (Тема Nothing)"),
+    GLASS("Nothing Dark Glass", "Матовое стекло Nothing"),
+    TRANSPARENT("Transparent", "Без фона (Только матрица)"),
     BLACK("AMOLED Black", "Черный AMOLED")
 }
 

@@ -120,7 +120,7 @@ object UiStrings {
         "accelerometer" to "Акселерометр", "tilt_response" to "РЕАКЦИЯ НА НАКЛОН", "frame_rate" to "ЧАСТОТА КАДРОВ",
         "display" to "ОТОБРАЖЕНИЕ", "sleep_mode" to "РЕЖИМ СНА", "lock_only" to "Только на блокировке",
         "sleep_clock" to "Часы во время сна", "start" to "▶  ЗАПУСТИТЬ НА МАТРИЦЕ", "stop" to "■  ОСТАНОВИТЬ МАТРИЦУ",
-        "add_toy" to "ДОБАВИТЬ В ALWAYS-ON GLYPH TOYS", "add_weather_widget" to "ДОБАВИТЬ ВИДЖЕТ ПОГОДЫ NOTHING", "add_weather_matrix_widget" to "ДОБАВИТЬ ВИДЖЕТ ПОГОДЫ (ТОЛЬКО МАТРИЦА)", "widget_theme" to "ФОН ВИДЖЕТА NOTHING OS 5", "toy_hint" to "Откройте: Glyph Interface → Flip to Glyph → Always-on Glyph Toy",
+        "add_toy" to "ДОБАВИТЬ В ALWAYS-ON GLYPH TOYS", "add_weather_widget" to "ДОБАВИТЬ ВИДЖЕТ ПОГОДЫ NOTHING", "add_weather_matrix_widget" to "ДОБАВИТЬ ВИДЖЕТ ПОГОДЫ (ТОЛЬКО МАТРИЦА)", "widget_theme" to "ФОН ВИДЖЕТА NOTHING", "toy_hint" to "Откройте: Glyph Interface → Flip to Glyph → Always-on Glyph Toy",
         "language" to "Язык", "github" to "GitHub", "donate" to "Donate", "update_available" to "ДОСТУПНО ОБНОВЛЕНИЕ",
         "update_body" to "На GitHub доступна более новая сборка Glyph Lab.", "download" to "СКАЧАТЬ", "downloading" to "СКАЧИВАНИЕ",
         "install" to "УСТАНОВИТЬ", "install_permission" to "Разрешите Glyph Lab установку приложений — после этого установщик откроется автоматически.",
