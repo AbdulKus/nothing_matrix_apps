@@ -22,6 +22,13 @@ enum class AutoBrightnessSource(val title: String) {
     SCREEN_BRIGHTNESS("Яркость экрана")
 }
 
+enum class WidgetTheme(val titleEn: String, val titleRu: String) {
+    SYSTEM("Nothing OS 5 Glass (System)", "Матовое стекло Nothing OS 5"),
+    GLASS("Nothing Glass (Dark)", "Матовое стекло (Dark Glass)"),
+    TRANSPARENT("Transparent", "Без фона (Прозрачный)"),
+    BLACK("AMOLED Black", "Черный AMOLED")
+}
+
 data class MatrixConfig(
     val effect: EffectType = EffectType.WIREFRAME,
     val solid: SolidType = SolidType.CUBE,
@@ -44,5 +51,6 @@ data class MatrixConfig(
     val clockLockScreenOnly: Boolean = false,
     val clockFont: ClockFont = ClockFont.CLASSIC,
     val clockLayout: ClockLayout = ClockLayout.STACKED,
-    val clockTransition: ClockTransition = ClockTransition.RANDOM
+    val clockTransition: ClockTransition = ClockTransition.RANDOM,
+    val widgetTheme: WidgetTheme = WidgetTheme.SYSTEM
 )

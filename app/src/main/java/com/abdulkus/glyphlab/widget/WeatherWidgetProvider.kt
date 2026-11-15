@@ -116,13 +116,20 @@ class WeatherWidgetProvider : AppWidgetProvider() {
 
             liveJob = CoroutineScope(Dispatchers.Default).launch {
                 val repo = WeatherRepository.get(app)
+                val configStore = com.abdulkus.glyphlab.data.ConfigStore(app)
                 val frameDelayMs = 125L // 8 FPS fluid Nothing dot-matrix animation
                 var counter = 0
+                var currentTheme = configStore.load().widgetTheme
 
                 while (isActive) {
                     val currStandardIds = appWidgetManager.getAppWidgetIds(standardComp)
                     val currMatrixIds = appWidgetManager.getAppWidgetIds(matrixComp)
                     if ((currStandardIds.isEmpty() && currMatrixIds.isEmpty()) || !pm.isInteractive) break
+
+                    // Check theme every 8 frames (~1 second) to immediately pick up user customizations
+                    if (counter % 8 == 0) {
+                        currentTheme = configStore.load().widgetTheme
+                    }
 
                     val elapsed = (System.nanoTime() - startTime) / 1e9
                     val snapshot = repo.state.value.snapshot
@@ -137,6 +144,7 @@ class WeatherWidgetProvider : AppWidgetProvider() {
                             temperature = temp,
                             seconds = elapsed,
                             matrixOnly = false,
+                            theme = currentTheme,
                             size = 320
                         )
                         val views = RemoteViews(app.packageName, R.layout.widget_weather).apply {
@@ -156,6 +164,7 @@ class WeatherWidgetProvider : AppWidgetProvider() {
                             temperature = temp,
                             seconds = elapsed,
                             matrixOnly = true,
+                            theme = currentTheme,
                             size = 320
                         )
                         val matrixViews = RemoteViews(app.packageName, R.layout.widget_weather_matrix).apply {

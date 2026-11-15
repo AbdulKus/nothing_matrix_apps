@@ -39,7 +39,11 @@ private val Ink = Color(0xFFF4F4F2)
 private val Dim = Color(0xFF949494)
 
 @Composable
-fun WeatherSettings(language: AppLanguage) {
+fun WeatherSettings(
+    language: AppLanguage,
+    config: MatrixConfig? = null,
+    onChange: ((MatrixConfig) -> Unit)? = null
+) {
     val context = LocalContext.current
     val repository = remember { WeatherRepository.get(context) }
     val state by repository.state.collectAsState()
@@ -95,6 +99,32 @@ fun WeatherSettings(language: AppLanguage) {
             com.abdulkus.glyphlab.widget.WeatherMatrixWidgetProvider.pinWidget(context)
         }, modifier = Modifier.fillMaxWidth()) {
             Text(language.t("add_weather_matrix_widget"), fontSize = 12.sp)
+        }
+
+        if (config != null && onChange != null) {
+            Spacer(Modifier.height(4.dp))
+            Text(language.t("widget_theme"), color = Dim, fontSize = 11.sp)
+            WidgetTheme.entries.chunked(2).forEach { row ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    row.forEach { theme ->
+                        OutlinedButton(
+                            onClick = {
+                                onChange(config.copy(widgetTheme = theme))
+                                com.abdulkus.glyphlab.widget.WeatherWidgetProvider.startLiveAnimation(context)
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                (if (config.widgetTheme == theme) "✓ " else "") +
+                                    if (language == AppLanguage.RU) theme.titleRu else theme.titleEn,
+                                fontSize = 10.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
         }
     }
     if (showGallery) WeatherGallery(language) { showGallery = false }

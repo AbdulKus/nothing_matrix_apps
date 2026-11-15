@@ -567,7 +567,7 @@ private fun SettingsPanel(language: AppLanguage, config: MatrixConfig, onChange:
         }
 
         if (config.effect == EffectType.WEATHER) {
-            com.abdulkus.glyphlab.ui.WeatherSettings(language)
+            com.abdulkus.glyphlab.ui.WeatherSettings(language, config, onChange)
         }
         if (config.effect == EffectType.CLOCK) {
             com.abdulkus.glyphlab.ui.ClockSettings(language, config, onChange)
