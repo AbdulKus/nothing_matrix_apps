@@ -78,8 +78,8 @@ class GlyphRuntime(context: Context) : SensorEventListener {
     private val callback = object : GlyphMatrixManager.Callback {
         override fun onServiceConnected(componentName: ComponentName?) {
             runCatching {
-                manager?.register(Glyph.DEVICE_25111p)
-                _connection.value = GlyphConnection.CONNECTED
+                val registered = manager?.register(Glyph.DEVICE_25111p) == true
+                _connection.value = if (registered) GlyphConnection.CONNECTED else GlyphConnection.UNAVAILABLE
             }.onFailure { _connection.value = GlyphConnection.UNAVAILABLE }
         }
 
@@ -98,14 +98,19 @@ class GlyphRuntime(context: Context) : SensorEventListener {
             sensorManager.registerListener(this, lightSensor, SensorManager.SENSOR_DELAY_NORMAL)
         }
         screenBrightness.start()
-        runCatching {
-            manager = GlyphMatrixManager.getInstance(appContext)
-            if (manager == null) {
-                _connection.value = GlyphConnection.UNAVAILABLE
-            } else {
-                manager?.init(callback)
-            }
-        }.onFailure { _connection.value = GlyphConnection.UNAVAILABLE }
+
+        if (!com.abdulkus.glyphlab.util.DeviceUtils.isPhone4aPro()) {
+            _connection.value = GlyphConnection.UNAVAILABLE
+        } else {
+            runCatching {
+                manager = GlyphMatrixManager.getInstance(appContext)
+                if (manager == null) {
+                    _connection.value = GlyphConnection.UNAVAILABLE
+                } else {
+                    manager?.init(callback)
+                }
+            }.onFailure { _connection.value = GlyphConnection.UNAVAILABLE }
+        }
 
         if (loop == null) {
             loop = scope.launch {

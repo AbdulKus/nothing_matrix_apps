@@ -85,6 +85,7 @@ import com.abdulkus.glyphlab.glyph.GlyphRuntime
 import com.abdulkus.glyphlab.ui.AppLanguage
 import com.abdulkus.glyphlab.ui.t
 import com.abdulkus.glyphlab.update.GitHubUpdater
+import com.abdulkus.glyphlab.util.DeviceUtils
 import com.abdulkus.glyphlab.weather.WeatherCondition
 import com.abdulkus.glyphlab.weather.WeatherRepository
 import kotlinx.coroutines.launch
@@ -101,14 +102,17 @@ class HomeActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         store = ConfigStore(this)
-        runtime = GlyphRuntime(this).also { it.start(store.load()) }
+        val is4aPro = DeviceUtils.isPhone4aPro()
+        val initialConfig = store.load().let {
+            if (!is4aPro && it.effect != EffectType.WEATHER) it.copy(effect = EffectType.WEATHER) else it
+        }
+        runtime = GlyphRuntime(this).also { it.start(initialConfig) }
         val prefs = getSharedPreferences("glyphlab_ui", Context.MODE_PRIVATE)
         val initialLanguage = AppLanguage.fromStorageCode(prefs.getString("language", null))
 
         setContent {
             GlyphLabTheme {
                 var language by remember { mutableStateOf(initialLanguage) }
-                val is4aPro = remember { isPhone4aPro() }
                 if (language == null) {
                     FirstRunLanguageScreen(is4aPro) { selected ->
                         prefs.edit().putString("language", selected.storageCode).apply()
@@ -118,8 +122,9 @@ class HomeActivity : ComponentActivity() {
                     GlyphLabScreen(
                         runtime = runtime,
                         store = store,
-                        initial = store.load(),
+                        initial = initialConfig,
                         initialLanguage = language!!,
+                        is4aPro = is4aPro,
                         onLanguageChanged = { selected ->
                             prefs.edit().putString("language", selected.storageCode).apply()
                             language = selected
@@ -139,15 +144,6 @@ class HomeActivity : ComponentActivity() {
         runtime.stop()
         super.onDestroy()
     }
-}
-
-private fun isPhone4aPro(): Boolean {
-    return runCatching {
-        com.nothing.ketchum.Common.is25111p() ||
-            android.os.Build.MODEL.equals("A069P", ignoreCase = true) ||
-            android.os.Build.DEVICE.equals("A069P", ignoreCase = true) ||
-            android.os.Build.PRODUCT.equals("A069P", ignoreCase = true)
-    }.getOrDefault(false)
 }
 
 private val Black = Color(0xFF050505)
@@ -262,6 +258,7 @@ private fun GlyphLabScreen(
     store: ConfigStore,
     initial: MatrixConfig,
     initialLanguage: AppLanguage,
+    is4aPro: Boolean,
     onLanguageChanged: (AppLanguage) -> Unit
 ) {
     val context = LocalContext.current
@@ -274,8 +271,7 @@ private fun GlyphLabScreen(
     var updateState by remember { mutableStateOf<UpdateState>(UpdateState.Hidden) }
     val frame by runtime.frame.collectAsState()
     val connection by runtime.connection.collectAsState()
-    val is4aPro = remember { isPhone4aPro() }
-    val hasMatrix = connection == GlyphConnection.CONNECTED || (is4aPro && connection != GlyphConnection.UNAVAILABLE)
+    val hasMatrix = is4aPro && connection != GlyphConnection.UNAVAILABLE
 
     LaunchedEffect(hasMatrix) {
         if (!hasMatrix && config.effect != EffectType.WEATHER) {
