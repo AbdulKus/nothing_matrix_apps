@@ -97,7 +97,14 @@ if 'tilt' in packed:
     (OUTPUT / 'weather-tilt-review.html').write_text(tilt_page)
 try:
     from PIL import Image, ImageDraw, ImageFont
-    font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 16)
+    font_paths = (
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+        '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+    )
+    font_path = next((path for path in font_paths if Path(path).is_file()), None)
+    if not font_path:
+        raise ImportError('No font for optional PNG contact sheets')
+    font = ImageFont.truetype(font_path, 16)
     def matrix(draw, frame, ox, oy, step):
         for y, width in enumerate([5,9,11,11,13,13,13,13,13,11,11,9,5]):
             for x in range((13-width)//2, (13+width)//2):

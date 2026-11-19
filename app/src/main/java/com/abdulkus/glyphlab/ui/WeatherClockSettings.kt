@@ -7,7 +7,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -30,11 +29,11 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.abdulkus.glyphlab.data.*
 import com.abdulkus.glyphlab.engine.*
 import com.abdulkus.glyphlab.weather.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
-import kotlin.math.roundToInt
 
 private val Ink = Color(0xFFF4F4F2)
 private val Dim = Color(0xFF949494)
@@ -42,8 +41,7 @@ private val Dim = Color(0xFF949494)
 @Composable
 fun WeatherSettings(
     language: AppLanguage,
-    config: MatrixConfig? = null,
-    onChange: ((MatrixConfig) -> Unit)? = null
+    preview: @Composable (WeatherSnapshot?, WeatherCondition) -> Unit
 ) {
     val context = LocalContext.current
     val repository = remember { WeatherRepository.get(context) }
@@ -52,6 +50,7 @@ fun WeatherSettings(
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var showGallery by remember { mutableStateOf(false) }
     var permissionDenied by remember { mutableStateOf(false) }
+    var showCities by remember { mutableStateOf(false) }
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         permissionDenied = !granted
@@ -59,7 +58,7 @@ fun WeatherSettings(
     }
     LaunchedEffect(repository, lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            if (repository.hasLocationPermission()) repository.updateLocation()
+            if (repository.hasLocationPermission() && !repository.hasSavedLocation()) repository.updateLocation()
             while (true) {
                 now = System.currentTimeMillis()
                 repository.refreshIfNeeded()
@@ -69,17 +68,14 @@ fun WeatherSettings(
     }
     Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
         val snapshot = state.snapshot
-        val condition = snapshot?.currentCondition(now) ?: WeatherCondition.UNKNOWN
-        Text(language.t("effect_weather"), color = Ink, fontWeight = FontWeight.Bold)
-        Text(buildString {
-            append(if (language == AppLanguage.RU) condition.ru else condition.en)
-            if (snapshot != null && condition != WeatherCondition.UNKNOWN) append(" · ${snapshot.temperature.roundToInt()}°")
-            if (snapshot != null) append("\n${language.t("weather_updated")} ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(snapshot.observedAt))}")
-        }, color = Dim, fontSize = 12.sp)
-        Text(language.t("weather_source"), color = Dim, fontSize = 11.sp)
-        TextButton(onClick = {
-            context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://open-meteo.com/")))
-        }) { Text("Open-Meteo.com ↗", fontSize = 11.sp) }
+        val condition = snapshot?.condition ?: WeatherCondition.UNKNOWN
+        preview(snapshot, condition)
+        state.city?.let { Text(it, color = Ink, fontWeight = FontWeight.Medium) }
+        if (snapshot != null) {
+            val updated = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(snapshot.observedAt))
+            val stale = if (snapshot.isCurrent(now)) "" else " · ${language.t("weather_stale")}"
+            Text("${language.t("weather_updated")} $updated$stale", color = Dim, fontSize = 12.sp)
+        }
         val message = if (permissionDenied) "weather_permission" else state.message
         if (message != null) Text(language.t(message), color = Color(0xFFE0B25A), fontSize = 12.sp)
         Button(onClick = {
@@ -88,84 +84,86 @@ fun WeatherSettings(
         }, enabled = !state.loading, modifier = Modifier.fillMaxWidth()) {
             Text(language.t(if (state.loading) "weather_loading" else "weather_locate"), fontSize = 12.sp)
         }
-        OutlinedButton(onClick = { showGallery = true }, modifier = Modifier.fillMaxWidth()) {
-            Text(language.t("weather_gallery").replace("{count}", WeatherCondition.entries.size.toString()), fontSize = 12.sp)
-        }
-        OutlinedButton(onClick = {
-            com.abdulkus.glyphlab.widget.WeatherWidgetProvider.pinWidget(context)
-        }, modifier = Modifier.fillMaxWidth()) {
-            Text(language.t("add_weather_widget"), fontSize = 12.sp)
-        }
-        OutlinedButton(onClick = {
-            com.abdulkus.glyphlab.widget.WeatherMatrixWidgetProvider.pinWidget(context)
-        }, modifier = Modifier.fillMaxWidth()) {
-            Text(language.t("add_weather_matrix_widget"), fontSize = 12.sp)
-        }
-
-        if (config != null && onChange != null) {
-            Spacer(Modifier.height(4.dp))
-            Text(language.t("widget_theme"), color = Dim, fontSize = 11.sp)
-            Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                WidgetTheme.entries.forEach { theme ->
-                    val active = config.widgetTheme == theme
-                    Text(
-                        text = (if (active) "✓ " else "") + (if (language == AppLanguage.RU) theme.titleRu else theme.titleEn).uppercase(),
-                        color = if (active) Color.Black else Ink,
-                        fontSize = 10.sp,
-                        fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                        modifier = Modifier
-                            .background(if (active) Ink else Color(0xFF1B1B1B), RoundedCornerShape(3.dp))
-                            .border(1.dp, if (active) Ink else Color(0xFF303030), RoundedCornerShape(3.dp))
-                            .clickable {
-                                onChange(config.copy(widgetTheme = theme))
-                                com.abdulkus.glyphlab.widget.WeatherWidgetProvider.startLiveAnimation(context)
-                            }
-                            .padding(horizontal = 10.dp, vertical = 8.dp)
-                    )
-                }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { showCities = true }, modifier = Modifier.weight(1f)) {
+                Text(language.t("weather_choose_city"), fontSize = 12.sp, textAlign = TextAlign.Center)
             }
+            OutlinedButton(onClick = { showGallery = true }, modifier = Modifier.weight(1f)) {
+                Text(language.t("weather_gallery_short"), fontSize = 12.sp, textAlign = TextAlign.Center)
+            }
+        }
+        Text(language.t("weather_source"), color = Dim, fontSize = 11.sp)
+    }
+    if (showGallery) WeatherGallery(language) { showGallery = false }
+    if (showCities) {
+        WeatherCityDialog(language, repository, onDismiss = { showCities = false }) { city ->
+            showCities = false
+            permissionDenied = false
+            scope.launch { repository.selectCity(city) }
+        }
+    }
+}
 
-            Spacer(Modifier.height(10.dp))
-            Text(language.t("widget_accent"), color = Dim, fontSize = 11.sp)
-            Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+@Composable
+private fun WeatherCityDialog(
+    language: AppLanguage,
+    repository: WeatherRepository,
+    onDismiss: () -> Unit,
+    onSelect: (WeatherCity) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var query by remember { mutableStateOf("") }
+    var cities by remember { mutableStateOf<List<WeatherCity>>(emptyList()) }
+    var message by remember { mutableStateOf<String?>(null) }
+    var searching by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(language.t("weather_choose_city")) },
+        text = {
+            Column(
+                Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                WidgetAccentColor.entries.forEach { accent ->
-                    val active = config.widgetAccent == accent
-                    val dotColor = Color(if (config.widgetTheme.isLight) accent.hexLightBg else accent.hexDarkBg)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .background(if (active) Ink else Color(0xFF1B1B1B), RoundedCornerShape(3.dp))
-                            .border(1.dp, if (active) Ink else Color(0xFF303030), RoundedCornerShape(3.dp))
-                            .clickable {
-                                onChange(config.copy(widgetAccent = accent))
-                                com.abdulkus.glyphlab.widget.WeatherWidgetProvider.startLiveAnimation(context)
-                            }
-                            .padding(horizontal = 10.dp, vertical = 8.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .background(dotColor, CircleShape)
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = (if (language == AppLanguage.RU) accent.titleRu else accent.titleEn).uppercase(),
-                            color = if (active) Color.Black else Ink,
-                            fontSize = 10.sp,
-                            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal
-                        )
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = {
+                        query = it
+                        cities = emptyList()
+                        message = null
+                    },
+                    enabled = !searching,
+                    label = { Text(language.t("weather_city_name")) },
+                    singleLine = true
+                )
+                message?.let { Text(language.t(it), color = Dim) }
+                cities.forEach { city ->
+                    TextButton(onClick = { onSelect(city) }, modifier = Modifier.fillMaxWidth()) {
+                        Text(city.label)
                     }
                 }
             }
-        }
-    }
-    if (showGallery) WeatherGallery(language) { showGallery = false }
+        },
+        confirmButton = {
+            Button(enabled = query.trim().length >= 2 && !searching, onClick = {
+                searching = true
+                message = null
+                cities = emptyList()
+                scope.launch {
+                    try {
+                        cities = repository.searchCities(query, language.storageCode)
+                        if (cities.isEmpty()) message = "weather_no_cities"
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        message = "weather_network_error"
+                    } finally {
+                        searching = false
+                    }
+                }
+            }) { Text(language.t(if (searching) "weather_loading" else "weather_search")) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(language.t("close")) } }
+    )
 }
 
 @Composable

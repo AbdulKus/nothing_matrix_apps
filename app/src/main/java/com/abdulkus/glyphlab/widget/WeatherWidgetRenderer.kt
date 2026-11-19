@@ -28,7 +28,9 @@ object WeatherWidgetRenderer {
         matrixOnly: Boolean = false,
         theme: WidgetTheme = WidgetTheme.SYSTEM,
         accent: WidgetAccentColor = WidgetAccentColor.WHITE,
-        size: Int = 320
+        size: Int = 320,
+        language: com.abdulkus.glyphlab.ui.AppLanguage? = null,
+        stale: Boolean = false
     ): Bitmap {
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -252,9 +254,12 @@ object WeatherWidgetRenderer {
             canvas.drawText(tempText, half, size * 0.81f, tempPaint)
 
             // Condition label (respecting current locale)
-            val isRu = Locale.getDefault().language.lowercase() == "ru"
+            val isRu = language?.let { it == com.abdulkus.glyphlab.ui.AppLanguage.RU }
+                ?: (Locale.getDefault().language == "ru")
             val rawCond = if (isRu) condition.ru else condition.en
-            val condText = rawCond.uppercase()
+            val condText = if (stale) {
+                if (isRu) "ПОСЛЕДНИЕ ДАННЫЕ" else "LAST READING"
+            } else rawCond.uppercase()
             condPaint.textSize = when {
                 condText.length > 18 -> size * 0.034f
                 condText.length > 12 -> size * 0.040f

@@ -9,10 +9,6 @@ import android.content.Intent
 import android.widget.RemoteViews
 import android.widget.Toast
 import com.abdulkus.glyphlab.R
-import com.abdulkus.glyphlab.weather.WeatherRepository
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
 /**
  * Full-circle Nothing Glyph Matrix weather widget without text or labels.
@@ -22,6 +18,7 @@ class WeatherMatrixWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         super.onUpdate(context, appWidgetManager, appWidgetIds)
+        WeatherWidgetRefreshJob.schedule(context)
         WeatherWidgetProvider.startLiveAnimation(context)
     }
 
@@ -39,15 +36,8 @@ class WeatherMatrixWidgetProvider : AppWidgetProvider() {
         super.onReceive(context, intent)
         when (intent.action) {
             ACTION_ANIMATE_MATRIX_WIDGET -> {
-                val pendingResult = goAsync()
-                CoroutineScope(Dispatchers.Default).launch {
-                    try {
-                        WeatherRepository.get(context).refreshIfNeeded()
-                        WeatherWidgetProvider.startLiveAnimation(context)
-                    } finally {
-                        pendingResult.finish()
-                    }
-                }
+                WeatherWidgetRefreshJob.schedule(context)
+                WeatherWidgetProvider.startLiveAnimation(context)
             }
             Intent.ACTION_USER_PRESENT -> {
                 WeatherWidgetProvider.startLiveAnimation(context)

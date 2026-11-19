@@ -1,6 +1,5 @@
 package com.abdulkus.glyphlab
 
-import android.Manifest
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -9,15 +8,26 @@ import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
-import androidx.compose.runtime.DisposableEffect
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.semantics.Role
+import com.abdulkus.glyphlab.ui.WeatherSettings
+import com.abdulkus.glyphlab.weather.WeatherSnapshot
+import com.abdulkus.glyphlab.widget.WeatherWidgetProvider
+import com.abdulkus.glyphlab.widget.WeatherMatrixWidgetProvider
+import com.abdulkus.glyphlab.widget.WeatherWidgetRenderer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -88,11 +98,8 @@ import com.abdulkus.glyphlab.ui.t
 import com.abdulkus.glyphlab.update.GitHubUpdater
 import com.abdulkus.glyphlab.util.DeviceUtils
 import com.abdulkus.glyphlab.weather.WeatherCondition
-import com.abdulkus.glyphlab.weather.WeatherRepository
 import kotlinx.coroutines.launch
 import java.io.File
-import java.text.DateFormat
-import java.util.Date
 import kotlin.math.roundToInt
 
 class HomeActivity : ComponentActivity() {
@@ -101,9 +108,10 @@ class HomeActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         store = ConfigStore(this)
-        val is4aPro = DeviceUtils.isPhone4aPro()
+        val is4aPro = DeviceUtils.isPhone4aPro() ||
+            (BuildConfig.DEBUG && intent.getBooleanExtra("matrix_preview", false))
         val initialConfig = store.load().let {
             if (!is4aPro && it.effect != EffectType.WEATHER) it.copy(effect = EffectType.WEATHER) else it
         }
@@ -147,13 +155,13 @@ class HomeActivity : ComponentActivity() {
     }
 }
 
-private val Black = Color(0xFF050505)
-private val Panel = Color(0xFF121212)
-private val PanelLight = Color(0xFF1B1B1B)
+private val Black = Color(0xFF101013)
+private val Panel = Color(0xFF1B1B21)
+private val PanelLight = Color(0xFF25252E)
 private val White = Color(0xFFF4F4F2)
-private val Muted = Color(0xFF949494)
-private val Red = Color(0xFFD71921)
-private val Line = Color(0xFF303030)
+private val Muted = Color(0xFFBABAC6)
+private val Red = Color(0xFFFF6A66)
+private val Line = Color(0xFF393942)
 private val Success = Color(0xFF8BCB69)
 
 private sealed interface UpdateState {
@@ -177,8 +185,8 @@ private fun GlyphLabTheme(content: @Composable () -> Unit) {
             onSurface = White
         ),
         typography = MaterialTheme.typography.copy(
-            bodyLarge = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
-            bodyMedium = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+            bodyLarge = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.SansSerif),
+            bodyMedium = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.SansSerif),
             labelLarge = MaterialTheme.typography.labelLarge.copy(fontFamily = FontFamily.Monospace)
         ),
         content = content
@@ -240,9 +248,9 @@ private fun LanguageChoice(language: AppLanguage, modifier: Modifier = Modifier,
     Row(
         modifier = modifier
             .height(52.dp)
-            .clip(RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(Panel)
-            .border(1.dp, Line, RoundedCornerShape(4.dp))
+            .border(1.dp, Line, RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 13.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -268,22 +276,14 @@ private fun GlyphLabScreen(
     var outputEnabled by remember { mutableStateOf(false) }
     var language by remember(initialLanguage) { mutableStateOf(initialLanguage) }
     var showLanguageDialog by remember { mutableStateOf(false) }
-    var showGalleryDialog by remember { mutableStateOf(false) }
-    var showWidgetSettingsDialog by remember { mutableStateOf(false) }
+    var widgetsSelected by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(!is4aPro) }
     var updateState by remember { mutableStateOf<UpdateState>(UpdateState.Hidden) }
-    val frame by runtime.frame.collectAsState()
     val connection by runtime.connection.collectAsState()
-    val hasMatrix = is4aPro && connection != GlyphConnection.UNAVAILABLE
-
-    LaunchedEffect(hasMatrix) {
-        if (!hasMatrix && config.effect != EffectType.WEATHER) {
-            config = config.copy(effect = EffectType.WEATHER)
-        }
-    }
 
     LaunchedEffect(config) {
         runtime.updateConfig(config)
         store.save(config)
+        WeatherWidgetProvider.startLiveAnimation(context)
     }
 
     LaunchedEffect(Unit) {
@@ -295,15 +295,22 @@ private fun GlyphLabScreen(
 
     Column(
         modifier = Modifier
+            .widthIn(max = 560.dp)
             .fillMaxSize()
             .background(Black)
             .statusBarsPadding()
             .navigationBarsPadding()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 18.dp),
+            .padding(horizontal = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Header(hasMatrix)
+        Header(language, is4aPro, widgetsSelected)
+        if (is4aPro) {
+            Row(Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AxisChoice(language.t("matrix_tab"), !widgetsSelected) { widgetsSelected = false }
+                AxisChoice(language.t("widgets_tab"), widgetsSelected) { widgetsSelected = true }
+            }
+        }
 
         UpdateBanner(
             language = language,
@@ -330,35 +337,34 @@ private fun GlyphLabScreen(
             }
         )
 
-        if (!hasMatrix) {
-            MinimalWeatherContent(
-                language = language,
-                config = config,
-                frame = frame,
-                onConfigChange = { config = it },
-                onOpenGallery = { showGalleryDialog = true },
-                onLanguage = { showLanguageDialog = true },
-                onGitHub = { openUrl(context, "https://github.com/AbdulKus/nothing_matrix_apps") },
-                onDonate = { openUrl(context, "https://abdulkus.github.io/donate") }
-            )
-        } else {
-            FullGlyphLabContent(
-                context = context,
-                language = language,
-                config = config,
-                frame = frame,
-                outputEnabled = outputEnabled,
-                onConfigChange = { config = it },
-                onToggleOutput = {
-                    outputEnabled = !outputEnabled
-                    runtime.setOutputEnabled(outputEnabled)
-                },
-                onWidgetSettings = { showWidgetSettingsDialog = true },
-                onLanguage = { showLanguageDialog = true },
-                onGitHub = { openUrl(context, "https://github.com/AbdulKus/nothing_matrix_apps") },
-                onDonate = { openUrl(context, "https://abdulkus.github.io/donate") }
-            )
+        androidx.compose.runtime.key(widgetsSelected) {
+            if (widgetsSelected) {
+                WidgetContent(language, config) { config = it }
+            } else {
+                val frame = runtime.frame.collectAsState()
+                FullGlyphLabContent(
+                    context = context,
+                    language = language,
+                    config = config,
+                    frame = { frame.value },
+                    outputEnabled = outputEnabled,
+                    connected = connection == GlyphConnection.CONNECTED,
+                    onConfigChange = { config = it },
+                    onToggleOutput = {
+                        outputEnabled = !outputEnabled
+                        runtime.setOutputEnabled(outputEnabled)
+                    },
+                    onWeather = { widgetsSelected = true }
+                )
+            }
         }
+
+        Footer(
+            language = language,
+            onLanguage = { showLanguageDialog = true },
+            onGitHub = { openUrl(context, "https://github.com/AbdulKus/nothing_matrix_apps") },
+            onDonate = { openUrl(context, "https://abdulkus.github.io/donate") }
+        )
     }
 
     if (showLanguageDialog) {
@@ -373,159 +379,60 @@ private fun GlyphLabScreen(
         )
     }
 
-    if (showGalleryDialog) {
-        com.abdulkus.glyphlab.ui.WeatherGallery(language) { showGalleryDialog = false }
-    }
+}
 
-    if (showWidgetSettingsDialog) {
-        WidgetSettingsDialog(
-            language = language,
-            config = config,
-            onDismiss = { showWidgetSettingsDialog = false },
-            onChange = {
-                config = it
-                com.abdulkus.glyphlab.widget.WeatherWidgetProvider.startLiveAnimation(context)
+@Composable
+private fun WidgetContent(language: AppLanguage, config: MatrixConfig, onChange: (MatrixConfig) -> Unit) {
+    val context = LocalContext.current
+    var dotsOnly by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        SettingsCard {
+            WeatherSettings(language) { snapshot, condition ->
+                WidgetPreview(config, snapshot, condition, dotsOnly, language)
             }
-        )
+        }
+        SettingsCard {
+            SectionTitle(language.t("widgets_tab"))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AxisChoice(language.t("widget_temperature"), !dotsOnly) { dotsOnly = false }
+                AxisChoice(language.t("widget_dots"), dotsOnly) { dotsOnly = true }
+            }
+            Button(
+                onClick = {
+                    if (dotsOnly) WeatherMatrixWidgetProvider.pinWidget(context)
+                    else WeatherWidgetProvider.pinWidget(context)
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text(language.t("pin_widget")) }
+        }
+        SettingsCard { WidgetSettingsPanel(language, config, onChange) }
     }
 }
 
 @Composable
-private fun MinimalWeatherContent(
-    language: AppLanguage,
+private fun WidgetPreview(
     config: MatrixConfig,
-    frame: IntArray,
-    onConfigChange: (MatrixConfig) -> Unit,
-    onOpenGallery: () -> Unit,
-    onLanguage: () -> Unit,
-    onGitHub: () -> Unit,
-    onDonate: () -> Unit
+    snapshot: WeatherSnapshot?,
+    condition: WeatherCondition,
+    dotsOnly: Boolean,
+    language: AppLanguage
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val repository = remember { WeatherRepository.get(context) }
-    val weatherState by repository.state.collectAsState()
-    var hasPermission by remember { mutableStateOf(repository.hasLocationPermission()) }
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasPermission = granted
-        if (granted) {
-            scope.launch { repository.updateLocation() }
-        }
+    val stale = snapshot?.isCurrent() == false
+    val preview = remember(context, config.widgetTheme, config.widgetAccent, snapshot, condition, dotsOnly, language, stale) {
+        WeatherWidgetRenderer.renderDial(
+            context, condition, snapshot?.temperature, 0.8,
+            matrixOnly = dotsOnly, theme = config.widgetTheme, accent = config.widgetAccent,
+            language = language, stale = stale
+        ).asImageBitmap()
     }
-
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                hasPermission = repository.hasLocationPermission()
-                if (hasPermission) {
-                    repository.refreshIfNeeded()
-                }
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    Box(Modifier.fillMaxWidth().padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
+        val status = if (language == AppLanguage.RU) condition.ru else condition.en
+        val temperature = snapshot?.temperature?.roundToInt()?.takeUnless { dotsOnly }
+        val details = if (temperature == null) status else "$status, $temperature°"
+        val description = if (stale) "$details, ${language.t("weather_stale")}" else details
+        Image(preview, description, Modifier.size(172.dp))
     }
-
-    val snapshot = weatherState.snapshot
-    val condition = snapshot?.currentCondition() ?: WeatherCondition.UNKNOWN
-    val tempText = if (snapshot != null && condition != WeatherCondition.UNKNOWN) " · ${snapshot.temperature.roundToInt()}°" else ""
-    val conditionTitle = (if (language == AppLanguage.RU) condition.ru else condition.en).uppercase()
-
-    MatrixPreview(frame, accentColor = Color(config.widgetAccent.hexDarkBg))
-
-    Text(
-        text = conditionTitle + tempText,
-        color = White,
-        fontFamily = FontFamily.Monospace,
-        fontWeight = FontWeight.Bold,
-        fontSize = 15.sp,
-        letterSpacing = 1.4.sp,
-        modifier = Modifier.padding(top = 8.dp, bottom = 12.dp)
-    )
-
-    WidgetSettingsPanel(
-        language = language,
-        config = config,
-        onChange = {
-            onConfigChange(it)
-            com.abdulkus.glyphlab.widget.WeatherWidgetProvider.startLiveAnimation(context)
-        }
-    )
-
-    Spacer(Modifier.height(18.dp))
-
-    if (!hasPermission) {
-        Button(
-            onClick = { permissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION) },
-            colors = ButtonDefaults.buttonColors(containerColor = White, contentColor = Black),
-            shape = RoundedCornerShape(4.dp),
-            modifier = Modifier.fillMaxWidth().height(54.dp)
-        ) {
-            Text(
-                language.t("grant_permission"),
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
-                letterSpacing = 0.7.sp,
-                fontSize = 12.sp
-            )
-        }
-
-        Button(
-            onClick = { com.abdulkus.glyphlab.widget.WeatherWidgetProvider.pinWidget(context) },
-            colors = ButtonDefaults.buttonColors(containerColor = PanelLight, contentColor = White),
-            shape = RoundedCornerShape(4.dp),
-            modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(48.dp)
-        ) {
-            Text(language.t("add_weather_widget"), fontSize = 11.sp, letterSpacing = 0.45.sp)
-        }
-    } else {
-        Button(
-            onClick = { com.abdulkus.glyphlab.widget.WeatherWidgetProvider.pinWidget(context) },
-            colors = ButtonDefaults.buttonColors(containerColor = White, contentColor = Black),
-            shape = RoundedCornerShape(4.dp),
-            modifier = Modifier.fillMaxWidth().height(54.dp)
-        ) {
-            Text(
-                language.t("add_weather_widget"),
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
-                letterSpacing = 0.7.sp,
-                fontSize = 12.sp
-            )
-        }
-
-        Button(
-            onClick = { com.abdulkus.glyphlab.widget.WeatherMatrixWidgetProvider.pinWidget(context) },
-            colors = ButtonDefaults.buttonColors(containerColor = PanelLight, contentColor = White),
-            shape = RoundedCornerShape(4.dp),
-            modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(48.dp)
-        ) {
-            Text(language.t("add_weather_matrix_widget"), fontSize = 11.sp, letterSpacing = 0.45.sp)
-        }
-    }
-
-    Button(
-        onClick = onOpenGallery,
-        colors = ButtonDefaults.buttonColors(containerColor = PanelLight, contentColor = White),
-        shape = RoundedCornerShape(4.dp),
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(48.dp)
-    ) {
-        Text(
-            language.t("weather_gallery").replace("{count}", WeatherCondition.entries.size.toString()),
-            fontSize = 11.sp,
-            letterSpacing = 0.45.sp
-        )
-    }
-
-    Footer(
-        language = language,
-        onLanguage = onLanguage,
-        onGitHub = onGitHub,
-        onDonate = onDonate
-    )
 }
 
 @Composable
@@ -534,20 +441,23 @@ private fun WidgetSettingsPanel(
     config: MatrixConfig,
     onChange: (MatrixConfig) -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Panel, RoundedCornerShape(5.dp))
-            .border(1.dp, Line, RoundedCornerShape(5.dp))
-            .padding(16.dp)
-    ) {
+    var choosingTheme by remember { mutableStateOf(false) }
+    fun themeTitle(theme: WidgetTheme) = if (language == AppLanguage.RU) theme.titleRu else theme.titleEn
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Label(language.t("widget_theme"))
-        ChoiceRow(
-            items = WidgetTheme.entries.toList(),
-            selected = config.widgetTheme,
-            title = { if (language == AppLanguage.RU) it.titleRu else it.titleEn }
-        ) { theme ->
-            onChange(config.copy(widgetTheme = theme))
+        Box {
+            OutlinedButton(onClick = { choosingTheme = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(themeTitle(config.widgetTheme), Modifier.weight(1f))
+                Text("▾", modifier = Modifier.padding(start = 8.dp))
+            }
+            DropdownMenu(expanded = choosingTheme, onDismissRequest = { choosingTheme = false }) {
+                WidgetTheme.entries.forEach { theme ->
+                    DropdownMenuItem(text = { Text(themeTitle(theme)) }, onClick = {
+                        choosingTheme = false
+                        onChange(config.copy(widgetTheme = theme))
+                    })
+                }
+            }
         }
 
         Spacer(Modifier.height(14.dp))
@@ -572,78 +482,17 @@ private fun AccentChoiceRow(
     language: AppLanguage,
     onSelect: (WidgetAccentColor) -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         items.forEach { item ->
-            val active = item == selected
             val dotColor = Color(if (isLightTheme) item.hexLightBg else item.hexDarkBg)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(if (active) White else PanelLight)
-                    .border(1.dp, if (active) White else Line, RoundedCornerShape(3.dp))
-                    .clickable { onSelect(item) }
-                    .padding(horizontal = 10.dp, vertical = 8.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .background(dotColor, CircleShape)
-                        .border(0.5.dp, if (active) Color(0x33000000) else Color(0x44FFFFFF), CircleShape)
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = (if (language == AppLanguage.RU) item.titleRu else item.titleEn).uppercase(),
-                    color = if (active) Black else White,
-                    fontSize = 10.sp,
-                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal
-                )
-            }
+            FilterChip(
+                selected = item == selected,
+                onClick = { onSelect(item) },
+                leadingIcon = { Box(Modifier.size(10.dp).background(dotColor, CircleShape)) },
+                label = { Text(if (language == AppLanguage.RU) item.titleRu else item.titleEn) }
+            )
         }
     }
-}
-
-@Composable
-private fun WidgetSettingsDialog(
-    language: AppLanguage,
-    config: MatrixConfig,
-    onDismiss: () -> Unit,
-    onChange: (MatrixConfig) -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Panel,
-        title = {
-            Text(
-                language.t("widget_settings"),
-                color = White,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
-            )
-        },
-        text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                WidgetSettingsPanel(
-                    language = language,
-                    config = config,
-                    onChange = onChange
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(language.t("close").uppercase(), color = White, fontFamily = FontFamily.Monospace)
-            }
-        }
-    )
 }
 
 @Composable
@@ -651,107 +500,71 @@ private fun FullGlyphLabContent(
     context: Context,
     language: AppLanguage,
     config: MatrixConfig,
-    frame: IntArray,
+    frame: () -> IntArray,
     outputEnabled: Boolean,
+    connected: Boolean,
     onConfigChange: (MatrixConfig) -> Unit,
     onToggleOutput: () -> Unit,
-    onWidgetSettings: () -> Unit,
-    onLanguage: () -> Unit,
-    onGitHub: () -> Unit,
-    onDonate: () -> Unit
+    onWeather: () -> Unit
 ) {
-    MatrixPreview(frame, accentColor = Color(config.widgetAccent.hexDarkBg))
-
-    Text(
-        text = effectTitle(language, config.effect),
-        color = White,
-        fontFamily = FontFamily.Monospace,
-        fontWeight = FontWeight.Bold,
-        fontSize = 15.sp,
-        letterSpacing = 1.4.sp,
-        modifier = Modifier.padding(top = 8.dp, bottom = 12.dp)
-    )
-
-    EffectSelector(language, config.effect) { onConfigChange(config.copy(effect = it)) }
-    Spacer(Modifier.height(18.dp))
-
-    SettingsPanel(language, config, onConfigChange)
-    Spacer(Modifier.height(18.dp))
-
-    Button(
-        onClick = onToggleOutput,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (outputEnabled) Red else White,
-            contentColor = if (outputEnabled) White else Black
-        ),
-        shape = RoundedCornerShape(4.dp),
-        modifier = Modifier.fillMaxWidth().height(54.dp)
-    ) {
-        Text(
-            if (outputEnabled) language.t("stop") else language.t("start"),
-            fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.Monospace,
-            letterSpacing = 0.7.sp,
-            fontSize = 12.sp
-        )
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Box(
+            Modifier.fillMaxWidth()
+                .background(Brush.verticalGradient(listOf(PanelLight, Panel)), RoundedCornerShape(24.dp))
+                .border(1.dp, Line, RoundedCornerShape(24.dp))
+                .padding(18.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            MatrixPreview(frame)
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onToggleOutput, enabled = connected, modifier = Modifier.weight(1f)) {
+                Text(language.t(if (outputEnabled) "matrix_stop" else "matrix_start"))
+            }
+            OutlinedButton(
+                onClick = { openGlyphToyManager(context, language) },
+                modifier = Modifier.weight(1f)
+            ) { Text("Glyph Toys", textAlign = TextAlign.Center) }
+        }
+        SettingsCard {
+            SectionTitle(language.t("effects_section"))
+            EffectSelector(language, config.effect) { onConfigChange(config.copy(effect = it)) }
+        }
+        SettingsPanel(language, config, onConfigChange, onWeather)
     }
-
-    Button(
-        onClick = { openGlyphToyManager(context, language) },
-        colors = ButtonDefaults.buttonColors(containerColor = PanelLight, contentColor = White),
-        shape = RoundedCornerShape(4.dp),
-        modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(48.dp)
-    ) {
-        Text(language.t("add_toy"), fontSize = 11.sp, letterSpacing = 0.45.sp)
-    }
-
-    Button(
-        onClick = onWidgetSettings,
-        colors = ButtonDefaults.buttonColors(containerColor = PanelLight, contentColor = White),
-        shape = RoundedCornerShape(4.dp),
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(48.dp)
-    ) {
-        Text(language.t("widget_settings"), fontSize = 11.sp, letterSpacing = 0.45.sp)
-    }
-
-    Button(
-        onClick = { com.abdulkus.glyphlab.widget.WeatherWidgetProvider.pinWidget(context) },
-        colors = ButtonDefaults.buttonColors(containerColor = PanelLight, contentColor = White),
-        shape = RoundedCornerShape(4.dp),
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(48.dp)
-    ) {
-        Text(language.t("add_weather_widget"), fontSize = 11.sp, letterSpacing = 0.45.sp)
-    }
-
-    Footer(
-        language = language,
-        onLanguage = onLanguage,
-        onGitHub = onGitHub,
-        onDonate = onDonate
-    )
 }
 
 @Composable
-private fun Header(hasMatrix: Boolean) {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 12.dp)
-    ) {
+private fun Header(language: AppLanguage, hasMatrix: Boolean, widgetsSelected: Boolean) {
+    Column(Modifier.fillMaxWidth().padding(top = 22.dp, bottom = 16.dp)) {
+        Text("GLYPH LAB", color = Red, fontSize = 12.sp, fontFamily = FontFamily.Monospace, letterSpacing = 2.sp)
         Text(
-            "GLYPH LAB",
+            language.t(if (widgetsSelected) "weather_heading" else "matrix_tab"),
             color = White,
-            fontSize = 25.sp,
-            fontWeight = FontWeight.Black,
-            fontFamily = FontFamily.Monospace,
-            letterSpacing = 1.5.sp
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 4.dp)
         )
-        Text(
-            if (hasMatrix) "FOR PHONE (4a) PRO" else "WEATHER WIDGET",
-            color = Muted,
-            fontSize = 10.sp,
-            letterSpacing = 1.sp,
-            modifier = Modifier.padding(top = 2.dp)
-        )
+        if (hasMatrix && !widgetsSelected) {
+            Text("Nothing Phone (4a) Pro", color = Muted, fontSize = 13.sp)
+        }
     }
+}
+
+@Composable
+private fun SettingsCard(content: @Composable () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth()
+            .background(Panel, RoundedCornerShape(22.dp))
+            .border(1.dp, Line, RoundedCornerShape(22.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) { content() }
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(text, color = White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
 }
 
 @Composable
@@ -774,8 +587,8 @@ private fun UpdateBanner(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 14.dp)
-            .background(Panel, RoundedCornerShape(5.dp))
-            .border(1.dp, Line, RoundedCornerShape(5.dp))
+            .background(Panel, RoundedCornerShape(22.dp))
+            .border(1.dp, Line, RoundedCornerShape(22.dp))
             .padding(14.dp)
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -792,7 +605,7 @@ private fun UpdateBanner(
         when (state) {
             is UpdateState.Downloading -> {
                 LinearProgressIndicator(
-                    progress = state.progress,
+                    progress = { state.progress },
                     modifier = Modifier.fillMaxWidth().height(5.dp),
                     color = Red,
                     trackColor = Line
@@ -821,7 +634,7 @@ private fun CompactActionButton(text: String, onClick: () -> Unit) {
         fontWeight = FontWeight.Bold,
         textAlign = TextAlign.Center,
         modifier = Modifier
-            .clip(RoundedCornerShape(3.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(White)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 9.dp)
@@ -830,7 +643,7 @@ private fun CompactActionButton(text: String, onClick: () -> Unit) {
 
 @Composable
 private fun MatrixPreview(
-    frame: IntArray,
+    frame: () -> IntArray,
     accentColor: Color = White
 ) {
     Box(
@@ -844,12 +657,13 @@ private fun MatrixPreview(
         contentAlignment = Alignment.Center
     ) {
         Canvas(Modifier.fillMaxSize()) {
+            val pixels = frame()
             val step = size.minDimension / MatrixEngine.SIZE
             val radius = step * 0.29f
             for (y in 0 until MatrixEngine.SIZE) {
                 for (x in 0 until MatrixEngine.SIZE) {
                     if (!MatrixEngine.isInsideMatrix(x, y)) continue
-                    val value = frame.getOrElse(y * MatrixEngine.SIZE + x) { 0 } / 255f
+                    val value = pixels.getOrElse(y * MatrixEngine.SIZE + x) { 0 } / 255f
                     drawCircle(
                         color = lerp(Color(0xFF181818), accentColor, value),
                         radius = radius,
@@ -863,45 +677,26 @@ private fun MatrixPreview(
 
 @Composable
 private fun EffectSelector(language: AppLanguage, selected: EffectType, onSelect: (EffectType) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        EffectType.entries.forEachIndexed { index, effect ->
-            val active = selected == effect
-            Column(
-                modifier = Modifier
-                    .width(88.dp)
-                    .height(62.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(if (active) White else Panel)
-                    .border(1.dp, if (active) White else Line, RoundedCornerShape(4.dp))
-                    .clickable { onSelect(effect) }
-                    .padding(9.dp),
-                verticalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("0${index + 1}", color = if (active) Red else Muted, fontSize = 10.sp)
-                Text(
-                    effectTitle(language, effect),
-                    color = if (active) Black else White,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1
-                )
-            }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        EffectType.entries.forEach { effect ->
+            FilterChip(
+                selected = selected == effect,
+                onClick = { onSelect(effect) },
+                label = { Text(effectTitle(language, effect)) }
+            )
         }
     }
 }
 
 @Composable
-private fun SettingsPanel(language: AppLanguage, config: MatrixConfig, onChange: (MatrixConfig) -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Panel, RoundedCornerShape(5.dp))
-            .border(1.dp, Line, RoundedCornerShape(5.dp))
-            .padding(16.dp)
-    ) {
+private fun SettingsPanel(
+    language: AppLanguage,
+    config: MatrixConfig,
+    onChange: (MatrixConfig) -> Unit,
+    onWeather: () -> Unit
+) {
+    SettingsCard {
+        SectionTitle(effectTitle(language, config.effect))
         if (config.effect == EffectType.WIREFRAME) {
             Label(language.t("shape"))
             ChoiceRow(
@@ -924,7 +719,7 @@ private fun SettingsPanel(language: AppLanguage, config: MatrixConfig, onChange:
         }
 
         if (config.effect == EffectType.WEATHER) {
-            com.abdulkus.glyphlab.ui.WeatherSettings(language, config, onChange)
+            OutlinedButton(onClick = onWeather) { Text(language.t("weather_heading")) }
         }
         if (config.effect == EffectType.CLOCK) {
             com.abdulkus.glyphlab.ui.ClockSettings(language, config, onChange)
@@ -942,18 +737,39 @@ private fun SettingsPanel(language: AppLanguage, config: MatrixConfig, onChange:
                     onChange(config.copy(trail = it))
                 }
             }
+            EffectType.LIQUID -> {
+                ConfigSlider(language.t("liquid_viscosity"), config.liquidViscosity, { "${(it * 100).roundToInt()}%" }) {
+                    onChange(config.copy(liquidViscosity = it))
+                }
+                ConfigSlider(language.t("liquid_fill"), config.liquidFill, { "${(15 + it * 70).roundToInt()}%" }) {
+                    onChange(config.copy(liquidFill = it))
+                }
+            }
             EffectType.STARFIELD -> ConfigSlider(language.t("trail"), config.trail, { "${(it * 100).roundToInt()}%" }) {
                 onChange(config.copy(trail = it))
             }
             EffectType.WIREFRAME, EffectType.CLOCK, EffectType.WEATHER -> Unit
         }
 
-        if (config.effect != EffectType.CLOCK) {
+        if (config.effect != EffectType.CLOCK && config.effect != EffectType.LIQUID) {
             ConfigSlider(language.t("speed"), config.speed, { "${(it * 100).roundToInt()}%" }) { onChange(config.copy(speed = it)) }
-        } else {
+        } else if (config.effect == EffectType.CLOCK) {
             Label(language.t("minute_update"))
         }
 
+        if (config.effect != EffectType.CLOCK) {
+            ToggleRow(language.t("accelerometer"), config.accelerometer) { onChange(config.copy(accelerometer = it)) }
+            if (config.accelerometer) {
+                ConfigSlider(language.t("tilt_response"), config.sensorStrength, { "${(it * 100).roundToInt()}%" }) {
+                    onChange(config.copy(sensorStrength = it))
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+    SettingsCard {
+        SectionTitle(language.t("display_section"))
         ToggleRow(language.t("auto_brightness"), config.autoBrightness) { onChange(config.copy(autoBrightness = it)) }
         if (config.autoBrightness) {
             Label(language.t("auto_source"))
@@ -975,23 +791,14 @@ private fun SettingsPanel(language: AppLanguage, config: MatrixConfig, onChange:
             onChange(config.copy(brightness = it, minimumBrightness = config.minimumBrightness.coerceAtMost(it)))
         }
 
-        if (config.effect != EffectType.CLOCK) {
-            ToggleRow(language.t("accelerometer"), config.accelerometer) { onChange(config.copy(accelerometer = it)) }
-            if (config.accelerometer) {
-                ConfigSlider(language.t("tilt_response"), config.sensorStrength, { "${(it * 100).roundToInt()}%" }) {
-                    onChange(config.copy(sensorStrength = it))
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-        }
         Label(language.t("frame_rate"))
         ChoiceRow(items = com.abdulkus.glyphlab.engine.FramePacer.OPTIONS, selected = config.frameRate, title = { "$it" }) {
             onChange(config.copy(frameRate = it))
         }
 
-        Spacer(Modifier.height(18.dp))
-        Label(if (config.effect == EffectType.CLOCK) language.t("display") else language.t("sleep_mode"))
+    }
+    SettingsCard {
+        SectionTitle(language.t("sleep_mode"))
         if (config.effect == EffectType.CLOCK) {
             ToggleRow(language.t("lock_only"), config.clockLockScreenOnly) { onChange(config.copy(clockLockScreenOnly = it)) }
         } else {
@@ -1023,7 +830,7 @@ private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(label.uppercase(), color = White, fontSize = 11.sp, letterSpacing = 0.35.sp, modifier = Modifier.weight(1f).padding(end = 8.dp))
+        Text(label, color = White, fontSize = 13.sp, letterSpacing = 0.35.sp, modifier = Modifier.weight(1f).padding(end = 8.dp))
         Switch(
             checked = checked,
             onCheckedChange = onChange,
@@ -1038,18 +845,18 @@ private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
 @Composable
 private fun RowScope.AxisChoice(label: String, checked: Boolean, onClick: () -> Unit) {
     Text(
-        text = if (checked) "✓ $label" else label,
+        text = label,
         color = if (checked) Black else White,
         fontSize = 11.sp,
         fontWeight = FontWeight.Bold,
         textAlign = TextAlign.Center,
         modifier = Modifier
             .weight(1f)
-            .clip(RoundedCornerShape(3.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(if (checked) White else PanelLight)
-            .border(1.dp, if (checked) White else Line, RoundedCornerShape(3.dp))
-            .clickable(onClick = onClick)
-            .padding(vertical = 10.dp)
+            .border(1.dp, if (checked) White else Line, RoundedCornerShape(12.dp))
+            .selectable(selected = checked, role = Role.Tab, onClick = onClick)
+            .padding(vertical = 12.dp)
     )
 }
 
@@ -1067,9 +874,9 @@ private fun <T> ChoiceRow(items: List<T>, selected: T, title: (T) -> String, onS
                 fontSize = 10.sp,
                 fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(3.dp))
+                    .clip(RoundedCornerShape(12.dp))
                     .background(if (active) White else PanelLight)
-                    .border(1.dp, if (active) White else Line, RoundedCornerShape(3.dp))
+                    .border(1.dp, if (active) White else Line, RoundedCornerShape(12.dp))
                     .clickable { onSelect(item) }
                     .padding(horizontal = 11.dp, vertical = 9.dp)
             )
@@ -1079,7 +886,7 @@ private fun <T> ChoiceRow(items: List<T>, selected: T, title: (T) -> String, onS
 
 @Composable
 private fun Label(text: String) {
-    Text(text, color = Muted, fontSize = 10.sp, letterSpacing = 0.65.sp)
+    Text(text, color = Muted, fontSize = 12.sp)
 }
 
 @Composable
@@ -1105,9 +912,9 @@ private fun RowScope.FooterButton(text: String, onClick: () -> Unit) {
         maxLines = 1,
         modifier = Modifier
             .weight(1f)
-            .clip(RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(Panel)
-            .border(1.dp, Line, RoundedCornerShape(4.dp))
+            .border(1.dp, Line, RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
             .padding(vertical = 11.dp, horizontal = 4.dp)
     )
@@ -1125,7 +932,7 @@ private fun LanguageDialog(language: AppLanguage, onDismiss: () -> Unit, onSelec
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(3.dp))
+                            .clip(RoundedCornerShape(12.dp))
                             .clickable { onSelected(item) }
                             .padding(vertical = 11.dp, horizontal = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -1149,6 +956,7 @@ private fun effectTitle(language: AppLanguage, effect: EffectType): String = lan
         EffectType.STARFIELD -> "effect_starfield"
         EffectType.CLOCK -> "effect_clock"
         EffectType.WEATHER -> "effect_weather"
+        EffectType.LIQUID -> "effect_liquid"
     }
 )
 

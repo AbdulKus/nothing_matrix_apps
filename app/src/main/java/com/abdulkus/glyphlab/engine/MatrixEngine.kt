@@ -22,6 +22,7 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
     private val stars = MutableList(34) { newStar() }
     private var lastNanos = 0L
     private var weatherSeconds = 0.0
+    private val liquid = LiquidRenderer()
     private val weatherTilt = TiltStabilizer()
 
     fun render(
@@ -50,6 +51,8 @@ class MatrixEngine(seed: Long = System.nanoTime()) {
             // Fire is perceived from the rear glass and its wind direction needs
             // the opposite horizontal sign from scene/camera movement.
             EffectType.FIRE -> renderFire(config, -sensorX)
+            // Same rear-facing gravity axes as sand.
+            EffectType.LIQUID -> liquid.render(config, dt, sensorX, -sensorY)
             EffectType.GRAVITY -> renderGravity(config, dt, sensorX, sensorY)
             EffectType.PLASMA -> renderPlasma(config, time, sensorX, sensorY)
             EffectType.STARFIELD -> renderStarfield(config, dt, sensorX, sensorY)

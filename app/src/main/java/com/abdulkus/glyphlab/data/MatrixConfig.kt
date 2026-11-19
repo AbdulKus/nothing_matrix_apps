@@ -7,7 +7,8 @@ enum class EffectType(val title: String, val shortTitle: String) {
     PLASMA("Плазменные волны", "ПЛАЗМА"),
     STARFIELD("Гиперпрыжок", "ЗВЁЗДЫ"),
     CLOCK("Часы", "ЧАСЫ"),
-    WEATHER("Погода", "ПОГОДА")
+    WEATHER("Погода", "ПОГОДА"),
+    LIQUID("Жидкость", "ВОДА")
 }
 
 enum class SolidType(val title: String) {
@@ -68,5 +69,7 @@ data class MatrixConfig(
     val clockLayout: ClockLayout = ClockLayout.STACKED,
     val clockTransition: ClockTransition = ClockTransition.RANDOM,
     val widgetTheme: WidgetTheme = WidgetTheme.SYSTEM,
-    val widgetAccent: WidgetAccentColor = WidgetAccentColor.WHITE
+    val widgetAccent: WidgetAccentColor = WidgetAccentColor.WHITE,
+    val liquidViscosity: Float = 0.25f,
+    val liquidFill: Float = 0.50f
 )

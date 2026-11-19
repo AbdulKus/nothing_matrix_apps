@@ -39,11 +39,15 @@ class ConfigStore(context: Context) {
         clockLayout = prefs.enum("clock_layout", ClockLayout.STACKED),
         clockTransition = prefs.enum("clock_transition", ClockTransition.RANDOM),
         widgetTheme = prefs.enum("widget_theme", WidgetTheme.SYSTEM),
-        widgetAccent = prefs.enum("widget_accent", WidgetAccentColor.WHITE)
+        widgetAccent = prefs.enum("widget_accent", WidgetAccentColor.WHITE),
+        liquidViscosity = prefs.getFloat("liquid_viscosity", 0.25f),
+        liquidFill = prefs.getFloat("liquid_fill", 0.50f)
     )
 
     fun save(config: MatrixConfig) {
         prefs.edit()
+            .putFloat("liquid_viscosity", config.liquidViscosity)
+            .putFloat("liquid_fill", config.liquidFill)
             .putString("widget_theme", config.widgetTheme.name)
             .putString("widget_accent", config.widgetAccent.name)
             .putString("clock_transition", config.clockTransition.name)
