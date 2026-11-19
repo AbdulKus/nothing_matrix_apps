@@ -6,8 +6,8 @@ package com.abdulkus.glyphlab.engine
 object SensorTilt {
     private const val GRAVITY_EARTH = 9.80665f
 
-    fun fromAndroid(x: Float, y: Float): TiltFilter.Tilt = TiltFilter.Tilt(
-        (-x / GRAVITY_EARTH).coerceIn(-1f, 1f),
-        (-y / GRAVITY_EARTH).coerceIn(-1f, 1f)
+    fun fromAndroid(x: Float, y: Float, limit: Float = 1f): TiltFilter.Tilt = TiltFilter.Tilt(
+        (-x / GRAVITY_EARTH).coerceIn(-limit, limit),
+        (-y / GRAVITY_EARTH).coerceIn(-limit, limit)
     )
 }

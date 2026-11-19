@@ -63,11 +63,13 @@ class MatrixToyService : Service(), SensorEventListener {
     private lateinit var keyguardManager: KeyguardManager
     private lateinit var screenBrightness: ScreenBrightnessMonitor
     private var motionSensor: Sensor? = null
+    private var accelerometer: Sensor? = null
     private var lightSensor: Sensor? = null
     private var ambientBrightness = AutomaticBrightnessController()
     private var lightSensorRegistered = false
     private var screenReceiverRegistered = false
     private var config = MatrixConfig()
+    @Volatile private var liquidMotion: TiltFilter.Tilt? = null
     @Volatile private var tiltX = 0f
     @Volatile private var tiltY = 0f
     private var motionOrientationKnown = false
@@ -153,14 +155,15 @@ class MatrixToyService : Service(), SensorEventListener {
         screenBrightness = ScreenBrightnessMonitor(this) {
             brightnessWake.trySend(Unit)
         }
-        motionSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
-            ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        motionSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY) ?: accelerometer
         lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
     }
 
     override fun onBind(intent: Intent?): IBinder {
         config = configStore.load()
         motionFilter.reset()
+        liquidMotion = null
         tiltX = 0f
         tiltY = 0f
         previousMode = null
@@ -174,6 +177,9 @@ class MatrixToyService : Service(), SensorEventListener {
         screenFacesDown = false
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         motionSensor?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+        }
+        accelerometer?.takeIf { it != motionSensor }?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
         }
         if (powerManager.isInteractive) registerLightSensor()
@@ -300,7 +306,8 @@ class MatrixToyService : Service(), SensorEventListener {
             val preview = WeatherPreview.state.value.condition
             if (current.effect == EffectType.WEATHER && preview == null) weather.refreshIfNeeded()
             val effective = if (preview == null) current else current.copy(effect = EffectType.WEATHER)
-            engine.render(effective, System.nanoTime(), tiltX, tiltY,
+            val acceleration = liquidMotion.takeIf { effective.effect == EffectType.LIQUID }
+            engine.render(effective, System.nanoTime(), acceleration?.x ?: tiltX, acceleration?.y ?: tiltY,
                 preview ?: weather.state.value.snapshot?.currentCondition() ?: WeatherCondition.UNKNOWN,
                 weatherSecondsOverride = preview?.let { WeatherPreview.timeSeconds(current.speed) }).also {
                 if (preview != null && !powerManager.isInteractive) WeatherPreview.publish(preview, it)
@@ -357,6 +364,10 @@ class MatrixToyService : Service(), SensorEventListener {
                 brightnessWake.trySend(Unit)
             }
             return
+        }
+        if (event.sensor.type == Sensor.TYPE_ACCELEROMETER) {
+            // Liquid responds to shaking as well as gravity. The other effects use their existing tilt signal.
+            liquidMotion = SensorTilt.fromAndroid(event.values[0], event.values[1], limit = 1.8f)
         }
         if (event.sensor.type != motionSensor?.type) return
         motionOrientationKnown = true

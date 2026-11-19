@@ -41,8 +41,8 @@ enum class GlyphConnection { CONNECTING, CONNECTED, UNAVAILABLE }
 class GlyphRuntime(context: Context) : SensorEventListener {
     private val appContext = context.applicationContext
     private val sensorManager = appContext.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-    private val motionSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
-        ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+    private val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+    private val motionSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY) ?: accelerometer
     private val lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
     private val configStore = ConfigStore(appContext)
     private val cachedAmbientLux = configStore.loadRecentAmbientLux()
@@ -66,6 +66,7 @@ class GlyphRuntime(context: Context) : SensorEventListener {
 
     @Volatile private var config = MatrixConfig()
     @Volatile private var outputEnabled = false
+    @Volatile private var liquidMotion: TiltFilter.Tilt? = null
     @Volatile private var tiltX = 0f
     @Volatile private var tiltY = 0f
     @Volatile private var motionOrientationKnown = false
@@ -90,10 +91,12 @@ class GlyphRuntime(context: Context) : SensorEventListener {
 
     fun start(initialConfig: MatrixConfig) {
         motionFilter.reset()
+        liquidMotion = null
         config = initialConfig
         if (motionSensor != null) {
             sensorManager.registerListener(this, motionSensor, SensorManager.SENSOR_DELAY_GAME)
         }
+        updateLiquidSensor(initialConfig.effect == EffectType.LIQUID && initialConfig.accelerometer)
         if (lightSensor != null) {
             sensorManager.registerListener(this, lightSensor, SensorManager.SENSOR_DELAY_NORMAL)
         }
@@ -128,7 +131,9 @@ class GlyphRuntime(context: Context) : SensorEventListener {
                         clockFrames.frame(masterBrightness = current.brightness, font = current.clockFont, layout = current.clockLayout)
                     } else {
                         if (current.effect == EffectType.WEATHER && preview == null) weather.refreshIfNeeded()
-                        engine.render(current, System.nanoTime(), tiltX, tiltY, preview ?: weather.state.value.snapshot?.currentCondition() ?: WeatherCondition.UNKNOWN,
+                        val acceleration = liquidMotion.takeIf { current.effect == EffectType.LIQUID }
+                        engine.render(current, System.nanoTime(), acceleration?.x ?: tiltX, acceleration?.y ?: tiltY,
+                            preview ?: weather.state.value.snapshot?.currentCondition() ?: WeatherCondition.UNKNOWN,
                             weatherSecondsOverride = preview?.let { WeatherPreview.timeSeconds(current.speed) })
                     }
                     val now = System.nanoTime()
@@ -176,8 +181,22 @@ class GlyphRuntime(context: Context) : SensorEventListener {
     }
 
     fun updateConfig(newConfig: MatrixConfig) {
+        val usedLiquidSensor = config.effect == EffectType.LIQUID && config.accelerometer
+        val usesLiquidSensor = newConfig.effect == EffectType.LIQUID && newConfig.accelerometer
+        if (usesLiquidSensor != usedLiquidSensor) updateLiquidSensor(usesLiquidSensor)
         config = newConfig
         brightnessWake.trySend(Unit)
+    }
+
+    private fun updateLiquidSensor(enabled: Boolean) {
+        val sensor = accelerometer ?: return
+        if (sensor == motionSensor) return
+        if (enabled) {
+            sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_GAME)
+        } else {
+            sensorManager.unregisterListener(this, sensor)
+            liquidMotion = null
+        }
     }
 
     fun setOutputEnabled(enabled: Boolean) {
@@ -209,6 +228,10 @@ class GlyphRuntime(context: Context) : SensorEventListener {
                 brightnessWake.trySend(Unit)
             }
             return
+        }
+        if (event.sensor.type == Sensor.TYPE_ACCELEROMETER) {
+            // Liquid responds to shaking as well as gravity. The other effects use their existing tilt signal.
+            liquidMotion = SensorTilt.fromAndroid(event.values[0], event.values[1], limit = 1.8f)
         }
         if (event.sensor.type != motionSensor?.type) return
         motionOrientationKnown = true

@@ -36,6 +36,26 @@ class LiquidRendererTest {
     }
 
     @Test
+    fun inversionMovesThePoolThroughTheMiddleWithoutSweepingSideways() {
+        val renderer = LiquidRenderer()
+        val config = MatrixConfig(liquidViscosity = 0.25f)
+        val dt = 1f / 60f
+        repeat(60) { renderer.render(config, dt, 0f, 1f) }
+
+        val center = MatrixEngine.SIZE / 2
+        fun centerOfLight(frame: IntArray, coordinate: (Int) -> Int): Double =
+            frame.indices.sumOf { (coordinate(it) - center) * frame[it] }.toDouble() / frame.sum()
+
+        val path = List(75) { renderer.render(config, dt, 0f, -1f) }
+        val heights = path.map { centerOfLight(it) { i -> i / MatrixEngine.SIZE } }
+
+        assertTrue(heights[6] > 1.5)
+        assertTrue(heights.any { kotlin.math.abs(it) < 0.35 })
+        assertTrue(heights.last() < -1.5)
+        assertTrue(path.all { kotlin.math.abs(centerOfLight(it) { i -> i % MatrixEngine.SIZE }) < 0.8 })
+    }
+
+    @Test
     fun increasingFillLightsMorePixels() {
         val renderer = LiquidRenderer()
         val config = MatrixConfig()
